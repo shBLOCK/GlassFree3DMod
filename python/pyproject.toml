@@ -1,0 +1,10 @@
+[project]
+name = "glassfree3dmod-python"
+version = "0.1.0"
+requires-python = "==3.12.*"
+dependencies = [
+    "mediapipe~=0.10.21",
+    "opencv-python",
+    "spatium==1.5.5",
+    "vedo"
+]
