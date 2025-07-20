@@ -3,6 +3,7 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/.idea/modules/GlassFree3DMod.main.iml" filepath="$PROJECT_DIR$/.idea/modules/GlassFree3DMod.main.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/GlassFree3DMod.test.iml" filepath="$PROJECT_DIR$/.idea/modules/GlassFree3DMod.test.iml" />
       <module fileurl="file://$PROJECT_DIR$/python/python.iml" filepath="$PROJECT_DIR$/python/python.iml" />
     </modules>
   </component>

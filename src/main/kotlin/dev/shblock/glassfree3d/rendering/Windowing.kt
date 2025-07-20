@@ -3,15 +3,17 @@ package dev.shblock.glassfree3d.rendering
 import com.mojang.blaze3d.systems.RenderSystem
 import com.mojang.blaze3d.vertex.Tesselator
 import dev.shblock.glassfree3d.utils.MC
+import org.joml.Vector2f
 import org.joml.Vector2i
 import org.lwjgl.glfw.GLFW.*
+import org.lwjgl.glfw.GLFWWindowPosCallbackI
 import org.lwjgl.opengl.GL
 import org.lwjgl.system.MemoryUtil.NULL
 
 class ModWindow(
     size: Vector2i,
-    pos: Vector2i? = null,
-    title: String
+    pos: Vector2i = Vector2i(GLFW_ANY_POSITION),
+    val title: String
 ) {
     private var _size = size
     var size
@@ -22,10 +24,13 @@ class ModWindow(
 
     private var _pos = pos
     var pos
-        get() = _pos!!
+        get() = _pos
         set(value) {
             TODO()
         }
+
+    var framebufferSize = Vector2i(1, 1)
+        private set
 
     init {
         glfwDefaultWindowHints()
@@ -35,13 +40,23 @@ class ModWindow(
         glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2)
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE)
         glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, 1)
-        glfwWindowHint(GLFW_POSITION_X, pos?.x ?: GLFW_ANY_POSITION)
-        glfwWindowHint(GLFW_POSITION_Y, pos?.y ?: GLFW_ANY_POSITION)
+        glfwWindowHint(GLFW_POSITION_X, pos.x)
+        glfwWindowHint(GLFW_POSITION_Y, pos.y)
     }
 
     private val window = glfwCreateWindow(size.x, size.y, title, NULL, MC.window.window)
 
     init {
+        glfwSetWindowPosCallback(window) { _, x, y ->
+            _pos = Vector2i(x, y)
+        }
+        glfwSetWindowSizeCallback(window) { _, width, height ->
+            _size = Vector2i(width, height)
+        }
+        glfwSetFramebufferSizeCallback(window) { _, width, height ->
+            framebufferSize = Vector2i(width, height)
+        }
+
         val oldCtx = glfwGetCurrentContext()
 
         glfwMakeContextCurrent(window)
@@ -49,12 +64,14 @@ class ModWindow(
         val maxTex = RenderSystem.maxSupportedTextureSize()
         glfwSetWindowSizeLimits(window, -1, -1, maxTex, maxTex)
 
-        if (_pos == null) {
-            val x = intArrayOf(0)
-            val y = intArrayOf(0)
-            glfwGetWindowPos(window, x, y)
-            _pos = Vector2i(x[0], y[0])
-        }
+        val tmpX = intArrayOf(0)
+        val tmpY = intArrayOf(0)
+        glfwGetWindowSize(window, tmpX, tmpY)
+        _size = Vector2i(tmpX[0], tmpY[0])
+        glfwGetWindowPos(window, tmpX, tmpY)
+        _pos = Vector2i(tmpX[0], tmpY[0])
+        glfwGetFramebufferSize(window, tmpX, tmpY)
+        framebufferSize = Vector2i(tmpX[0], tmpY[0])
 
         glfwMakeContextCurrent(oldCtx)
     }

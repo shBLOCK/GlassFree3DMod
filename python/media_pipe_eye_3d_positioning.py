@@ -1,5 +1,6 @@
 import queue
 import time
+import collections
 from collections.abc import Callable
 from dataclasses import dataclass
 from threading import Thread

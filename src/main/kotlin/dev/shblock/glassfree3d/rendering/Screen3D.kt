@@ -8,6 +8,11 @@ import com.mojang.blaze3d.vertex.VertexFormat
 import com.mojang.blaze3d.vertex.VertexFormatElement
 import dev.shblock.glassfree3d.utils.MC
 import dev.shblock.glassfree3d.utils.MiscUtils
+import dev.shblock.glassfree3d.utils.minus
+import dev.shblock.glassfree3d.utils.plus
+import dev.shblock.glassfree3d.utils.times
+import dev.shblock.glassfree3d.utils.toVec3
+import net.minecraft.client.Camera
 import net.minecraft.client.Minecraft
 import net.minecraft.client.renderer.LevelRenderer
 import net.minecraft.client.renderer.Rect2i
@@ -15,56 +20,99 @@ import net.minecraft.client.renderer.RenderBuffers
 import net.minecraft.client.renderer.ShaderInstance
 import net.minecraft.resources.ResourceKey
 import net.minecraft.world.level.Level
+import org.joml.Matrix4d
 import org.joml.Matrix4f
+import org.joml.Quaterniond
 import org.joml.Quaternionf
-import org.lwjgl.glfw.GLFW.glfwGetCurrentContext
+import org.joml.Vector2d
+import org.joml.Vector3d
 import org.lwjgl.glfw.GLFW.glfwMakeContextCurrent
 import java.util.*
-import kotlin.math.PI
 
 class Screen3D(
     val window: ModWindow,
-    val viewport: Rect2i
+    var viewport: Rect2i
 ) {
     private val framebuffer = MainTarget(viewport.width, viewport.height)
-//    private val camera = Camera()
+
+    var virtualPos = Vector3d()
+    var virtualSize = Vector2d(1.0)
+    var virtualOrientation = Quaterniond()
+    var realPos = Vector3d()
+    var realSize = Vector2d(1.0)
+    var realOrientation = Quaterniond()
+    var realCameraPos = Vector3d(0.0, 0.0, 1.0)
+    var virtualCameraPos = Vector3d(0.0, 0.0, 1.0)
+        private set
+    var zNear = 0.05
+    var clipAtScreenPlane = true
+
+    private val virtualCamera = Camera()
+    private var frustumMatrix = Matrix4d()
+    private var projectionMatrix = Matrix4d()
 
     init {
         Manager.newScreen(this)
+    }
+
+    private fun updateProjectionAndCamera() {
+        val localRealCameraPos = realOrientation.transformInverse(realCameraPos - realPos)
+        val scale = virtualSize.div(realSize, Vector2d())
+        val scale3d = Vector3d(scale, (scale.x + scale.y) / 2.0)
+        val localVirtualCameraPos = localRealCameraPos.mul(scale3d, Vector3d())
+        virtualCameraPos = virtualOrientation.transform(localVirtualCameraPos, Vector3d()) + virtualPos
+
+        if (clipAtScreenPlane) {
+            zNear = localVirtualCameraPos.z
+        }
+        virtualCamera.initialized = true
+        println("localVirtualCameraPos: $localVirtualCameraPos")
+        virtualCamera.position = virtualCameraPos.toVec3()
+        virtualCamera.rotation.set(virtualOrientation)
+        frustumMatrix.rotation(Quaternionf(virtualOrientation.conjugate(Quaterniond())))
+        val halfVirtualSize = virtualSize.div(2.0, Vector2d())
+        projectionMatrix.setFrustum(
+            -localVirtualCameraPos.x - halfVirtualSize.x,
+            -localVirtualCameraPos.x + halfVirtualSize.x,
+            -localVirtualCameraPos.y - halfVirtualSize.y,
+            -localVirtualCameraPos.y + halfVirtualSize.y,
+            zNear, MC.gameRenderer.depthFar.toDouble()
+        )
     }
 
     private fun render() {
         RenderSystem.assertOnRenderThread()
 
         MiscUtils.withMainRenderTarget(framebuffer) {
+            if (framebuffer.width != viewport.width || framebuffer.height != viewport.height) {
+                framebuffer.resize(viewport.width, viewport.height, false)
+            }
+
             framebuffer.bindWrite(true)
 
-            val levelRenderer = Manager.levelRenderers[MC.level!!.dimension()]!!
+            val levelRenderer = Manager.getLevelRenderer(MC.level!!.dimension())
+            virtualCamera.level = levelRenderer.level!!
+            virtualCamera.entity = MC.player!!
 
-            val camera = MC.gameRenderer.mainCamera
-            val frustumMatrix = Matrix4f().rotation(camera.rotation().conjugate(Quaternionf()))
-            val projectionMatrix = Matrix4f()
-            projectionMatrix.perspective(
-                (PI / 2.0).toFloat(),
-                (viewport.width / viewport.height).toFloat(),
-                0.05F,
-                MC.gameRenderer.depthFar
-            )
-            RenderSystem.setProjectionMatrix(projectionMatrix, VertexSorting.DISTANCE_TO_ORIGIN)
+            updateProjectionAndCamera()
+            val frustumMatrixF = Matrix4f(frustumMatrix)
+            val projectionMatrixF = Matrix4f(projectionMatrix)
+
+            RenderSystem.setProjectionMatrix(projectionMatrixF, VertexSorting.DISTANCE_TO_ORIGIN)
 
             levelRenderer.prepareCullFrustum(
-                camera.position,
-                frustumMatrix,
-                projectionMatrix
+                virtualCamera.position,
+                frustumMatrixF,
+                projectionMatrixF
             )
             levelRenderer.renderLevel(
                 MC.timer,
                 false,
-                camera,
+                virtualCamera,
                 MC.gameRenderer,
                 MC.gameRenderer.lightTexture(),
-                frustumMatrix,
-                projectionMatrix
+                frustumMatrixF,
+                projectionMatrixF
             )
 
             framebuffer.unbindWrite()
@@ -106,20 +154,22 @@ class Screen3D(
     object Manager {
         private val screens = mutableListOf<Screen3D>()
         private val windows = mutableSetOf<ModWindow>()
-        internal val levelRenderers = mutableMapOf<ResourceKey<Level>, LevelRenderer>()
-
-        init {
-            levelRenderers[Level.OVERWORLD] = LevelRenderer(
-                MC,
-                MC.entityRenderDispatcher,
-                MC.blockEntityRenderDispatcher,
-                RenderBuffers(Runtime.getRuntime().availableProcessors())
-            ).apply { setLevel(MC.level) }
-        }
+        private val levelRenderers = mutableMapOf<ResourceKey<Level>, LevelRenderer>()
 
         internal fun newScreen(screen: Screen3D) {
             screens += screen
             windows += screen.window
+        }
+
+        internal fun getLevelRenderer(dim: ResourceKey<Level>): LevelRenderer {
+            return levelRenderers.getOrPut(dim) {
+                LevelRenderer(
+                    MC,
+                    MC.entityRenderDispatcher,
+                    MC.blockEntityRenderDispatcher,
+                    RenderBuffers(Runtime.getRuntime().availableProcessors())
+                ).apply { setLevel(MC.level) } // TODO: actually handle non-current levels
+            }
         }
 
         internal fun renderAll() {
