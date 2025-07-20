@@ -13,7 +13,7 @@ import vedo
 from spatium import *
 from mediapipe.tasks.python.components.containers import landmark as landmark_module
 
-from denoise import Denoiser, SimpleDenoiser
+from denoise import Denoiser, SimpleDenoiser, KalmanFilterDenoiser
 
 
 def _landmark_to_vec3(landmark: landmark_module.NormalizedLandmark) -> Vec3:
@@ -213,8 +213,10 @@ class MediaPipeEye3DPositioner:
         self._last_3d_visualizer = visualize_3d
 
     def _processor_thread_main(self):
-        left_eye_denoiser = SimpleDenoiser(decay_per_sec=0.002)
-        right_eye_denoiser = SimpleDenoiser(decay_per_sec=0.002)
+        left_eye_denoiser = KalmanFilterDenoiser(pred_noise_cov=np.eye(6) * 0.1, observation_noise_cov=np.eye(3) * 0.75)
+        right_eye_denoiser = KalmanFilterDenoiser(pred_noise_cov=np.eye(6) * 0.1, observation_noise_cov=np.eye(3) * 0.75)
+        # left_eye_denoiser = SimpleDenoiser(decay_per_sec=0.001)
+        # right_eye_denoiser = SimpleDenoiser(decay_per_sec=0.001)
         while True:
             result = self._results_queue.get()
             if not self.running:
