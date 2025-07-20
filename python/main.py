@@ -15,7 +15,8 @@ packet_queue = queue.Queue(60)
 
 def server_thread_main():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.bind(("localhost", 30001))
+        sock.bind(("127.0.0.1", 30001))
+        print("Server started")
         while True:
             sock.listen()
             conn, addr = sock.accept()
@@ -23,7 +24,7 @@ def server_thread_main():
                 print(f"Accepted client: {addr}")
                 while True:
                     try:
-                        conn.sendall(packet_queue.get())
+                        conn.sendall(packet_queue.get().encode())
                     except OSError as e:
                         print(f"Failed to send packet: {e}")
                         break
@@ -46,15 +47,16 @@ def main():
             pass
 
     camera = cv2.VideoCapture(0)
-    # camera.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
-    # camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
-    camera.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-    camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+    camera.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+    camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+    # camera.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+    # camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
     camera.set(cv2.CAP_PROP_FPS, 60)
 
     positioner = MediaPipeEye3DPositioner(
         camera=camera,
-        fov_y=radians(60),
+        fov_y=radians(55),
+        std_eye_distance=5.8,
         visualize=True,
         result_callback=result_callback
     )

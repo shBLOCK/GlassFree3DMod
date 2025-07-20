@@ -16,6 +16,9 @@ from mediapipe.tasks.python.components.containers import landmark as landmark_mo
 def _landmark_to_vec3(landmark: landmark_module.NormalizedLandmark) -> Vec3:
     return Vec3(landmark.x, landmark.y, landmark.z)
 
+def _fmt_vec3(v: Vec3):
+    return f"({v.x: .1f}, {v.y: .1f}, {v.z: .1f})"
+
 # def _draw_landmarks_on_image(rgb_image, landmarks):
 #     from mediapipe.framework.formats import landmark_pb2
 #
@@ -97,6 +100,10 @@ class MediaPipeEye3DPositioner:
 
         self._last_3d_visualizer: Callable | None = None
 
+        self._visualization_image = None
+        self._visualization_trail_left = []
+        self._visualization_trail_right = []
+
     def _process_result(self, result: Result):
         left_eye_uv = _landmark_to_vec3(result._face_landmarks[473]).xy
         right_eye_uv = _landmark_to_vec3(result._face_landmarks[468]).xy
@@ -130,10 +137,16 @@ class MediaPipeEye3DPositioner:
         result.left_eye_3d = left_eye_3d
         result.right_eye_3d = right_eye_3d
 
-        print((left_eye_3d + right_eye_3d) / 2)
-
         def visualize_3d(plt: vedo.Plotter):
-            from vedo import Line, Image, Lines, Axes, Points
+            from vedo import Line, Image, Lines, Axes, Points, Text2D
+
+            trail_points = 100
+            self._visualization_trail_left.append(left_eye_3d)
+            if len(self._visualization_trail_left) > trail_points:
+                self._visualization_trail_left.pop(0)
+            self._visualization_trail_right.append(right_eye_3d)
+            if len(self._visualization_trail_right) > trail_points:
+                self._visualization_trail_right.pop(0)
 
             # axes
             plt += Axes(
@@ -152,9 +165,9 @@ class MediaPipeEye3DPositioner:
             image_half_size = Vec2(sin(self.fov_y / 2) * ar, sin(self.fov_y / 2))
 
             # image
-            cv_image = cv2.cvtColor(result._frame_view, cv2.COLOR_BGR2RGB)
-            image = Image(cv_image)
-            image.scale(image_half_size.y * 2 / cv_image.shape[0])
+            self._visualization_image = cv2.cvtColor(result._frame_view, cv2.COLOR_BGR2RGB, dst=self._visualization_image)
+            image = Image(self._visualization_image)
+            image.scale(image_half_size.y * 2 / self._visualization_image.shape[0])
             image.pos(*-image_half_size, z=-1)
             plt += image
 
@@ -175,6 +188,8 @@ class MediaPipeEye3DPositioner:
             plt += Line(Vec3(0), left_eye_3d, c="red")
             plt += Line(Vec3(0), right_eye_3d, c="green")
             plt += Line(left_eye_3d, right_eye_3d, c="blue")
+            plt += Line(self._visualization_trail_left, c="red")
+            plt += Line(self._visualization_trail_right, c="green")
 
             # camera frustum
             plt += Lines(
@@ -183,6 +198,10 @@ class MediaPipeEye3DPositioner:
                 scale=10,
                 alpha=0.5
             )
+
+            plt += Text2D(f"Left:   {_fmt_vec3(left_eye_3d)}", c="red", font="VictorMono")
+            plt += Text2D(f"\nRight:  {_fmt_vec3(right_eye_3d)}", c="green", font="VictorMono")
+            plt += Text2D(f"\n\nCenter: {_fmt_vec3((left_eye_3d + right_eye_3d) / 2)}", c="blue", font="VictorMono")
 
         self._last_3d_visualizer = visualize_3d
 
@@ -204,6 +223,8 @@ class MediaPipeEye3DPositioner:
                     _frame_view=output_image.numpy_view()
                 ))
 
+        frame = None
+
         with mp.tasks.vision.FaceLandmarker.create_from_options(
             mp.tasks.vision.FaceLandmarkerOptions(
                 mp.tasks.BaseOptions(model_asset_path="face_landmarker.task"),
@@ -214,8 +235,7 @@ class MediaPipeEye3DPositioner:
         ) as landmarker:
             last_time_ms = 0
             while True:
-                _, frame = self.camera.read()
-                # frame = cv2.flip(frame, 1)
+                _, frame = self.camera.read(frame)
                 time_ms = int(time.monotonic() * 1e3)
                 if time_ms == last_time_ms:
                     continue
@@ -223,12 +243,12 @@ class MediaPipeEye3DPositioner:
                     image=mp.Image(image_format=mp.ImageFormat.SRGB, data=frame),
                     timestamp_ms=time_ms
                 )
+                # print(f"FPS: {1000 / (time_ms - last_time_ms)}")
                 last_time_ms = time_ms
 
     def _visualization_thread_main(self):
-        vedo.settings.use_parallel_projection = True
-        vedo.settings.use_depth_peeling = True
-        vedo.settings.force_single_precision_points = False
+        # vedo.settings.use_depth_peeling = True
+        # vedo.settings.force_single_precision_points = False
 
         plt = vedo.Plotter(size=(1280, 800), interactive=True)
 
@@ -236,7 +256,10 @@ class MediaPipeEye3DPositioner:
             if not self.running:
                 plt.close()
                 return
-            plt.clear()
+
+            #clear
+            plt.clear(deep=True)
+
             visualizer = self._last_3d_visualizer
             if visualizer is not None:
                 visualizer(plt)
@@ -244,6 +267,7 @@ class MediaPipeEye3DPositioner:
 
         plt.add_callback("timer", update, enable_picking=False)
         plt.timer_callback("create", dt=1)
+        plt.parallel_projection()
         plt.show(viewup="y", title="MediaPipeEye3DPositioner")
         plt.close()
         self.running = False
