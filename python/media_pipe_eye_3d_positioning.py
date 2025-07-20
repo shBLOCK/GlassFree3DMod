@@ -13,6 +13,8 @@ import vedo
 from spatium import *
 from mediapipe.tasks.python.components.containers import landmark as landmark_module
 
+from denoise import Denoiser, SimpleDenoiser
+
 
 def _landmark_to_vec3(landmark: landmark_module.NormalizedLandmark) -> Vec3:
     return Vec3(landmark.x, landmark.y, landmark.z)
@@ -105,7 +107,7 @@ class MediaPipeEye3DPositioner:
         self._visualization_trail_left = []
         self._visualization_trail_right = []
 
-    def _process_result(self, result: Result):
+    def _process_result(self, result: Result, left_eye_denoiser: Denoiser, right_eye_denoiser: Denoiser):
         left_eye_uv = _landmark_to_vec3(result._face_landmarks[473]).xy
         right_eye_uv = _landmark_to_vec3(result._face_landmarks[468]).xy
 
@@ -134,18 +136,22 @@ class MediaPipeEye3DPositioner:
 
         left_eye_3d = left_eye_p_std_depth * eyes_depth_scale
         right_eye_3d = right_eye_p_std_depth * eyes_depth_scale
+        left_eye_denoiser.add(left_eye_3d, 1/30)     # TODO: sync this with the actual FPS
+        right_eye_denoiser.add(right_eye_3d, 1/30)
 
-        result.left_eye_3d = left_eye_3d
-        result.right_eye_3d = right_eye_3d
+        # result.left_eye_3d = left_eye_3d
+        # result.right_eye_3d = right_eye_3d
+        result.left_eye_3d = left_eye_denoiser.get_denoised()
+        result.right_eye_3d = right_eye_denoiser.get_denoised()
 
         def visualize_3d(plt: vedo.Plotter):
             from vedo import Line, Image, Lines, Axes, Points, Text2D
 
             trail_points = 100
-            self._visualization_trail_left.append(left_eye_3d)
+            self._visualization_trail_left.append(result.left_eye_3d)
             if len(self._visualization_trail_left) > trail_points:
                 self._visualization_trail_left.pop(0)
-            self._visualization_trail_right.append(right_eye_3d)
+            self._visualization_trail_right.append(result.right_eye_3d)
             if len(self._visualization_trail_right) > trail_points:
                 self._visualization_trail_right.pop(0)
 
@@ -184,11 +190,11 @@ class MediaPipeEye3DPositioner:
             plt += Line(left_eye_p_std_depth, head_right_dir_q_perpendicular)
             plt += Line(right_eye_p_std_depth, head_right_dir_q_perpendicular)
 
-            plt += Points([left_eye_3d], r=8, c="red")
-            plt += Points([right_eye_3d], r=8, c="green")
-            plt += Line(Vec3(0), left_eye_3d, c="red")
-            plt += Line(Vec3(0), right_eye_3d, c="green")
-            plt += Line(left_eye_3d, right_eye_3d, c="blue")
+            plt += Points([result.left_eye_3d], r=8, c="red")
+            plt += Points([result.right_eye_3d], r=8, c="green")
+            plt += Line(Vec3(0), result.left_eye_3d, c="red")
+            plt += Line(Vec3(0), result.right_eye_3d, c="green")
+            plt += Line(result.left_eye_3d, result.right_eye_3d, c="blue")
             plt += Line(self._visualization_trail_left, c="red")
             plt += Line(self._visualization_trail_right, c="green")
 
@@ -200,18 +206,20 @@ class MediaPipeEye3DPositioner:
                 alpha=0.5
             )
 
-            plt += Text2D(f"Left:   {_fmt_vec3(left_eye_3d)}", c="red", font="VictorMono")
-            plt += Text2D(f"\nRight:  {_fmt_vec3(right_eye_3d)}", c="green", font="VictorMono")
-            plt += Text2D(f"\n\nCenter: {_fmt_vec3((left_eye_3d + right_eye_3d) / 2)}", c="blue", font="VictorMono")
+            plt += Text2D(f"Left:   {_fmt_vec3(result.left_eye_3d)}", c="red", font="VictorMono")
+            plt += Text2D(f"\nRight:  {_fmt_vec3(result.right_eye_3d)}", c="green", font="VictorMono")
+            plt += Text2D(f"\n\nCenter: {_fmt_vec3((result.left_eye_3d + result.right_eye_3d) / 2)}", c="blue", font="VictorMono")
 
         self._last_3d_visualizer = visualize_3d
 
     def _processor_thread_main(self):
+        left_eye_denoiser = SimpleDenoiser(decay_per_sec=0.002)
+        right_eye_denoiser = SimpleDenoiser(decay_per_sec=0.002)
         while True:
             result = self._results_queue.get()
             if not self.running:
                 break
-            self._process_result(result)
+            self._process_result(result, left_eye_denoiser, right_eye_denoiser)
             self._last_result = result
             self.result_callback(result)
 

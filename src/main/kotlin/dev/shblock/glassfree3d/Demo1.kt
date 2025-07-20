@@ -20,10 +20,6 @@ import kotlin.concurrent.thread
 
 private val JsonObject.asVector3d get() = Vector3d(get("x").asDouble, get("y").asDouble, get("z").asDouble)
 
-private val DISPLAY_RESOLUTION = Vector2i(2560, 1600)
-private val DISPLAY_SIZE = Vector2d(34.5, 21.5)
-private val DISPLAY_CENTER_OFFSET_FROM_CAMERA = Vector3d(0.0, -DISPLAY_SIZE.y / 2 - 0.6, 0.0)
-
 object Demo1 {
     private lateinit var window: ModWindow
     private lateinit var screen: Screen3D

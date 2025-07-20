@@ -3,3 +3,6 @@
 /.kotlin/
 /.venv/
 /.gradle/
+
+# Device-specifc constants
+src/main/kotlin/dev/shblock/glassfree3d/Consts.kt
