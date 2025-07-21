@@ -16,6 +16,9 @@ repositories {
         url = 'https://thedarkcolour.github.io/KotlinForForge/'
         content { includeGroup "thedarkcolour" }
     }
+    maven { url 'https://modmaven.dev/' }
+    maven { url = "https://maven.createmod.net" } // Create, Ponder, Flywheel
+    maven { url = "https://maven.ithundxr.dev/snapshots" } // Registrate
 }
 
 base {
@@ -100,7 +103,20 @@ sourceSets.main.resources { srcDir 'src/generated/resources' }
 
 
 dependencies {
-    implementation 'thedarkcolour:kotlinforforge-neoforge:5.9.0'
+    implementation('thedarkcolour:kotlinforforge-neoforge:5.9.0')
+
+    implementation("com.fazecast:jSerialComm:2.11.2")
+    additionalRuntimeClasspath("com.fazecast:jSerialComm:2.11.2")
+
+    runtimeOnly("mezz.jei:jei-${minecraft_version}-neoforge:19.22.0.315")
+    runtimeOnly("mekanism:Mekanism:${minecraft_version}-10.7.9.72")
+    runtimeOnly("mekanism:Mekanism:${minecraft_version}-10.7.9.72:additions")
+    runtimeOnly("mekanism:Mekanism:${minecraft_version}-10.7.9.72:generators")
+    runtimeOnly("mekanism:Mekanism:${minecraft_version}-10.7.9.72:tools")
+    runtimeOnly("com.simibubi.create:create-${minecraft_version}:6.0.6-107:slim") { transitive = false }
+    runtimeOnly("net.createmod.ponder:Ponder-NeoForge-${minecraft_version}:1.0.59")
+    runtimeOnly("dev.engine-room.flywheel:flywheel-neoforge-${minecraft_version}:1.0.4-27")
+    runtimeOnly("com.tterrag.registrate:Registrate:MC1.21-1.3.0+67")
 
     // Example mod dependency with JEI
     // The JEI API is declared for compile time use, while the full JEI artifact is used at runtime
