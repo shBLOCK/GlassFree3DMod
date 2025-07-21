@@ -7,5 +7,6 @@ dependencies = [
     "opencv-python",
     "spatium==1.5.5",
 #    "vedo==2025.5.4"
-    "vedo@git+https://github.com/marcomusy/vedo"
+    "vedo@git+https://github.com/marcomusy/vedo",
+    "pykalman==0.10.1"
 ]
