@@ -2,6 +2,7 @@ import queue
 import time
 import collections
 from collections.abc import Callable
+from typing_extensions import Optional
 from dataclasses import dataclass
 from threading import Thread
 
@@ -13,7 +14,7 @@ import vedo
 from spatium import *
 from mediapipe.tasks.python.components.containers import landmark as landmark_module
 
-from denoise import Denoiser, SimpleDenoiser, KalmanFilterDenoiser
+from denoise import Denoiser, SimpleDenoiser, KalmanFilterDenoiser3D
 
 
 def _landmark_to_vec3(landmark: landmark_module.NormalizedLandmark) -> Vec3:
@@ -81,9 +82,11 @@ class MediaPipeEye3DPositioner:
         self.std_eye_distance = std_eye_distance
         self._visualize = visualize
         self.result_callback = result_callback
+        self._last_result: Optional[MediaPipeEye3DPositioner.Result] = None
 
         self.running = True
-        self._results_queue = queue.Queue()
+        self._results_queue_1: queue.Queue[MediaPipeEye3DPositioner.Result] = queue.Queue()
+        self._results_queue_2: queue.Queue[MediaPipeEye3DPositioner.Result] = queue.Queue()
         self._processor_thread = Thread(
             target=self._processor_thread_main,
             name="MediaPipeEye3DPositioningProcessor",
@@ -94,6 +97,11 @@ class MediaPipeEye3DPositioner:
             name="MediaPipeEye3DPositioningCamera",
             daemon=True
         )
+        self._denoise_thread = Thread(
+            target=self._denoise_thread_main,
+            name="MediaPipeEye3DPositioningDenoise",
+            daemon=True
+        )
         if self._visualize:
             self._visualization_thread = Thread(
                 target=self._visualization_thread_main,
@@ -101,13 +109,13 @@ class MediaPipeEye3DPositioner:
                 daemon=True
             )
 
-        self._last_3d_visualizer: Callable | None = None
+        self._last_3d_visualizers: list[Callable[[vedo.Plotter], None] | None] = [None, None]
 
         self._visualization_image = None
         self._visualization_trail_left = []
         self._visualization_trail_right = []
 
-    def _process_result(self, result: Result, left_eye_denoiser: Denoiser, right_eye_denoiser: Denoiser):
+    def _process_result(self, result: Result):
         # left_eye_uv = _landmark_to_vec3(result._face_landmarks[473]).xy
         # right_eye_uv = _landmark_to_vec3(result._face_landmarks[468]).xy
         LEFT_EYE_POINTS = (362, 398, 384, 385, 386, 387, 388, 466, 263, 249, 390, 373, 374, 380, 381, 382)
@@ -140,24 +148,14 @@ class MediaPipeEye3DPositioner:
 
         left_eye_3d = left_eye_p_std_depth * eyes_depth_scale
         right_eye_3d = right_eye_p_std_depth * eyes_depth_scale
-        left_eye_denoiser.add(left_eye_3d, 1/30)     # TODO: sync this with the actual FPS
-        right_eye_denoiser.add(right_eye_3d, 1/30)
 
-        # result.left_eye_3d = left_eye_3d
-        # result.right_eye_3d = right_eye_3d
-        result.left_eye_3d = left_eye_denoiser.get_denoised()
-        result.right_eye_3d = right_eye_denoiser.get_denoised()
+        result.left_eye_3d = left_eye_3d
+        result.right_eye_3d = right_eye_3d
+
+        self._results_queue_2.put(result)
 
         def visualize_3d(plt: vedo.Plotter):
             from vedo import Line, Image, Lines, Axes, Points, Text2D
-
-            trail_points = 100
-            self._visualization_trail_left.append(result.left_eye_3d)
-            if len(self._visualization_trail_left) > trail_points:
-                self._visualization_trail_left.pop(0)
-            self._visualization_trail_right.append(result.right_eye_3d)
-            if len(self._visualization_trail_right) > trail_points:
-                self._visualization_trail_right.pop(0)
 
             # axes
             plt += Axes(
@@ -199,8 +197,6 @@ class MediaPipeEye3DPositioner:
             plt += Line(Vec3(0), result.left_eye_3d, c="red")
             plt += Line(Vec3(0), result.right_eye_3d, c="green")
             plt += Line(result.left_eye_3d, result.right_eye_3d, c="blue")
-            plt += Line(self._visualization_trail_left, c="red")
-            plt += Line(self._visualization_trail_right, c="green")
 
             # camera frustum
             plt += Lines(
@@ -214,27 +210,19 @@ class MediaPipeEye3DPositioner:
             plt += Text2D(f"\nRight:  {_fmt_vec3(result.right_eye_3d)}", c="green", font="VictorMono")
             plt += Text2D(f"\n\nCenter: {_fmt_vec3((result.left_eye_3d + result.right_eye_3d) / 2)}", c="blue", font="VictorMono")
 
-        self._last_3d_visualizer = visualize_3d
+        self._last_3d_visualizers[0] = visualize_3d
 
     def _processor_thread_main(self):
-        pred_noise_cov = np.eye(6) * 0.1
-        observation_noise_cov = np.eye(3) * 0.75
-        left_eye_denoiser = KalmanFilterDenoiser(pred_noise_cov=pred_noise_cov, observation_noise_cov=observation_noise_cov)
-        right_eye_denoiser = KalmanFilterDenoiser(pred_noise_cov=pred_noise_cov, observation_noise_cov=observation_noise_cov)
-        # left_eye_denoiser = SimpleDenoiser(decay_per_sec=0.001)
-        # right_eye_denoiser = SimpleDenoiser(decay_per_sec=0.001)
         while True:
-            result = self._results_queue.get()
+            result = self._results_queue_1.get()
             if not self.running:
                 break
-            self._process_result(result, left_eye_denoiser, right_eye_denoiser)
-            self._last_result = result
-            self.result_callback(result)
+            self._process_result(result)
 
     def _camera_thread_main(self):
         def result_callback(result: mp.tasks.vision.FaceLandmarkerResult, output_image: mp.Image, timestamp_ms: int):
             if result.face_landmarks:
-                self._results_queue.put(self.Result(
+                self._results_queue_1.put(self.Result(
                     _face_landmarks=result.face_landmarks[0],
                     _face_transform=Transform3D(*result.facial_transformation_matrixes[0][:3].flatten("F")),
                     _frame_view=output_image.numpy_view()
@@ -265,6 +253,60 @@ class MediaPipeEye3DPositioner:
                 )
                 # print(f"FPS: {1000 / (time_ms - last_time_ms)}")
                 last_time_ms = time_ms
+    
+    def _denoise_thread_main(self):
+        FPS = 60
+        pred_noise_cov = np.eye(6) * 0.1
+        observation_noise_cov = np.eye(3) * 0.8
+        left_eye_denoiser = KalmanFilterDenoiser3D(pred_noise_cov=pred_noise_cov, observation_noise_cov=observation_noise_cov)
+        right_eye_denoiser = KalmanFilterDenoiser3D(pred_noise_cov=pred_noise_cov, observation_noise_cov=observation_noise_cov)
+        # left_eye_denoiser = SimpleDenoiser(decay_per_sec=0.001)
+        # right_eye_denoiser = SimpleDenoiser(decay_per_sec=0.001)
+        while True:
+            if not self.running:
+                break
+            while self._results_queue_2.qsize() > 1:
+                self._results_queue_2.get()
+            if not self._results_queue_2.empty():
+                result = self._results_queue_2.get()
+                left_eye_denoiser.add(result.left_eye_3d)
+                right_eye_denoiser.add(result.right_eye_3d)
+                self._last_result = result
+        
+            # Write back to self._last_result and run the callback function
+            if self._last_result != None:
+                self._last_result.left_eye_3d = left_eye_denoiser.get_denoised()
+                self._last_result.right_eye_3d = right_eye_denoiser.get_denoised()
+                self.result_callback(self._last_result)
+                if self._visualize:
+                    # Record the denoised point in visualization trails
+                    trail_points = 100
+                    self._visualization_trail_left.append(self._last_result.left_eye_3d)
+                    if len(self._visualization_trail_left) > trail_points:
+                        self._visualization_trail_left.pop(0)
+                    self._visualization_trail_right.append(self._last_result.right_eye_3d)
+                    if len(self._visualization_trail_right) > trail_points:
+                        self._visualization_trail_right.pop(0)
+
+            # Visualize the denoised points
+            def visualize_3d(plt: vedo.Plotter):
+                from vedo import Line, Image, Lines, Axes, Points, Text2D
+                if self._last_result != None:
+                    result = self._last_result
+                    # Plot points and trails
+                    plt += Points([result.left_eye_3d], r=8, c="#F59E9F")
+                    plt += Points([result.right_eye_3d], r=8, c="#7DDA58")
+                    plt += Line(Vec3(0), result.left_eye_3d, c="#F59E9F")
+                    plt += Line(Vec3(0), result.right_eye_3d, c="#7DDA58")
+                    plt += Line(self._visualization_trail_left, c="#F59E9F")
+                    plt += Line(self._visualization_trail_right, c="#7DDA58")
+
+            self._last_3d_visualizers[1] = visualize_3d
+
+            # Sleep 1/FPS seconds to create a stable FPS
+            time.sleep(1/FPS)
+            left_eye_denoiser.advance(1/FPS)
+            right_eye_denoiser.advance(1/FPS)
 
     def _visualization_thread_main(self):
         # vedo.settings.use_depth_peeling = True
@@ -281,9 +323,9 @@ class MediaPipeEye3DPositioner:
             for obj in plt.objects:
                 plt.remove(obj)
 
-            visualizer = self._last_3d_visualizer
-            if visualizer is not None:
-                visualizer(plt)
+            for visualizer in self._last_3d_visualizers:
+                if visualizer is not None:
+                    visualizer(plt)
             plt.render()
 
         plt.add_callback("timer", update, enable_picking=False)
@@ -295,6 +337,7 @@ class MediaPipeEye3DPositioner:
 
     def start(self):
         self._processor_thread.start()
+        self._denoise_thread.start()
         if self._visualize:
             self._visualization_thread.start()
         self._camera_thread.start()
@@ -302,6 +345,7 @@ class MediaPipeEye3DPositioner:
     def close(self):
         self.running = False
         self._processor_thread.join()
+        self._denoise_thread.join()
         if self._visualize:
             self._visualization_thread.join()
         self._camera_thread.join()

@@ -7,8 +7,13 @@ from spatium import *
 
 class Denoiser[T](ABC):
     @abstractmethod
-    def add(self, sample: T, duration_secs: float):
+    def add(self, sample: T):
         """Adds a new sample to the denoiser"""
+        pass
+
+    @abstractmethod
+    def advance(self, duration_secs: float):
+        """Advance the denoiser by a given amount of time"""
         pass
 
     @abstractmethod
@@ -24,18 +29,22 @@ class SimpleDenoiser[T](Denoiser[T]):
         assert 0.0 < decay_per_sec < 1.0, "`decay` value must be between 0.0 and 1.0"
         self.decay_per_sec = decay_per_sec
         self.last_denoised_value: Optional[T] = None
+        self.last_sample: Optional[T] = None
 
-    def add(self, sample: T, duration_secs: float):
+    def add(self, sample: T):
+        self.last_sample = sample
+    
+    def advance(self, duration_secs: float):
         decay = self.decay_per_sec ** duration_secs
         if self.last_denoised_value == None:
-            self.last_denoised_value = sample
+            self.last_denoised_value = self.last_sample
         else:
-            self.last_denoised_value = self.last_denoised_value * decay + sample * (1 - decay)
+            self.last_denoised_value = self.last_denoised_value * decay + self.last_sample * (1 - decay)
     
     def get_denoised(self) -> Optional[T]:
         return self.last_denoised_value
 
-class KalmanFilterDenoiser(Denoiser[Vec3]):
+class KalmanFilterDenoiser3D(Denoiser[Vec3]):
     """
     A simple Kalman filter denoiser.
 
@@ -51,6 +60,7 @@ class KalmanFilterDenoiser(Denoiser[Vec3]):
         self.pred_noise_cov = pred_noise_cov
         self.observation_noise_cov = observation_noise_cov
         self.covariance_mat = np.zeros((6, 6))   # TODO: initialize covariance matrix
+        self.last_sample: Optional[Vec3] = None
     
     def transformation_mat(self, dt: float) -> np.ndarray:
         return np.array([
@@ -96,9 +106,17 @@ class KalmanFilterDenoiser(Denoiser[Vec3]):
         self.state = new_state
         self.covariance_mat = new_cov
 
-    def add(self, sample: Vec3, duration_secs: float):
+    def add(self, sample: Vec3):
+        self.last_sample = sample
+
+    def advance(self, duration_secs: float):
         pred_state, pred_cov = self.kf_predict(duration_secs)
-        self.kf_next(pred_state, pred_cov, sample)
+        if self.last_sample != None:
+            self.kf_next(pred_state, pred_cov, self.last_sample)
+            self.last_sample = None
+        else:
+            self.state = pred_state
+            self.covariance_mat = pred_cov
     
     def get_denoised(self):
         return Vec3(self.state[0], self.state[1], self.state[2])
