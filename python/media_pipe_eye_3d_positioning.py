@@ -217,8 +217,10 @@ class MediaPipeEye3DPositioner:
         self._last_3d_visualizer = visualize_3d
 
     def _processor_thread_main(self):
-        left_eye_denoiser = KalmanFilterDenoiser(pred_noise_cov=np.eye(6) * 0.1, observation_noise_cov=np.eye(3) * 0.75)
-        right_eye_denoiser = KalmanFilterDenoiser(pred_noise_cov=np.eye(6) * 0.1, observation_noise_cov=np.eye(3) * 0.75)
+        pred_noise_cov = np.eye(6) * 0.1
+        observation_noise_cov = np.eye(3) * 0.75
+        left_eye_denoiser = KalmanFilterDenoiser(pred_noise_cov=pred_noise_cov, observation_noise_cov=observation_noise_cov)
+        right_eye_denoiser = KalmanFilterDenoiser(pred_noise_cov=pred_noise_cov, observation_noise_cov=observation_noise_cov)
         # left_eye_denoiser = SimpleDenoiser(decay_per_sec=0.001)
         # right_eye_denoiser = SimpleDenoiser(decay_per_sec=0.001)
         while True:
@@ -245,6 +247,9 @@ class MediaPipeEye3DPositioner:
                 mp.tasks.BaseOptions(model_asset_path="face_landmarker.task"),
                 running_mode=mp.tasks.vision.RunningMode.LIVE_STREAM,
                 output_facial_transformation_matrixes=True,
+                min_tracking_confidence=0.1,
+                min_face_detection_confidence=0.1,
+                min_face_presence_confidence=0.1,
                 result_callback=result_callback
             )
         ) as landmarker:
