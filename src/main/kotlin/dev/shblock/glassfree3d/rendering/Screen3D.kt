@@ -64,7 +64,6 @@ class Screen3D(
             zNear = localVirtualCameraPos.z
         }
         virtualCamera.initialized = true
-        println("localVirtualCameraPos: $localVirtualCameraPos")
         virtualCamera.position = virtualCameraPos.toVec3()
         virtualCamera.rotation.set(virtualOrientation)
         frustumMatrix.rotation(Quaternionf(virtualOrientation.conjugate(Quaterniond())))

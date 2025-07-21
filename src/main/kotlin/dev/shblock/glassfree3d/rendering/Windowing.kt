@@ -3,10 +3,9 @@ package dev.shblock.glassfree3d.rendering
 import com.mojang.blaze3d.systems.RenderSystem
 import com.mojang.blaze3d.vertex.Tesselator
 import dev.shblock.glassfree3d.utils.MC
-import org.joml.Vector2f
+import dev.shblock.glassfree3d.utils.MiscUtils
 import org.joml.Vector2i
 import org.lwjgl.glfw.GLFW.*
-import org.lwjgl.glfw.GLFWWindowPosCallbackI
 import org.lwjgl.opengl.GL
 import org.lwjgl.system.MemoryUtil.NULL
 
@@ -75,6 +74,8 @@ class ModWindow(
 
         glfwMakeContextCurrent(oldCtx)
     }
+
+    fun posInMonitor(monitor: Long): Vector2i = Vector2i(pos).sub(MiscUtils.getMonitorPos(monitor))
 
     fun makeCurrent() {
         glfwMakeContextCurrent(window)
