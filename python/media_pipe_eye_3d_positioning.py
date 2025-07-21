@@ -303,12 +303,12 @@ class MediaPipeEye3DPositioner:
                     plt += Line(self._visualization_trail_left, c="#F59E9F")
                     plt += Line(self._visualization_trail_right, c="#7DDA58")
 
+                self._last_3d_visualizers[1] = visualize_3d
 
             # Sleep 1/FPS seconds to create a stable FPS
             time.sleep(1/FPS)
             left_eye_denoiser.advance(1/FPS)
             right_eye_denoiser.advance(1/FPS)
-                self._last_3d_visualizers[1] = visualize_3d
 
     def _visualization_thread_main(self):
         # vedo.settings.use_depth_peeling = True
