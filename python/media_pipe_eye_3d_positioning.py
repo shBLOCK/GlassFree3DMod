@@ -15,7 +15,7 @@ import vedo
 from spatium import *
 from mediapipe.tasks.python.components.containers import landmark as landmark_module
 
-from denoise import Denoiser, SimpleDenoiser, KalmanFilterDenoiser3D
+from denoise import Denoiser, SimpleDenoiser, KalmanFilterDenoiser3D, PyKalmanDenoiser3D
 
 
 def _landmark_to_vec3(landmark: landmark_module.NormalizedLandmark) -> Vec3:
@@ -268,14 +268,23 @@ class MediaPipeEye3DPositioner:
                 last_time_ms = time_ms
 
     def _denoise_thread_main(self):
-        UPSAMPLE = 1
+        UPSAMPLE = 2
 
-        pred_noise_cov = np.eye(6) * 0.1
-        observation_noise_cov = np.eye(3) * 0.8
-        left_eye_denoiser = KalmanFilterDenoiser3D(pred_noise_cov=pred_noise_cov,
-                                                   observation_noise_cov=observation_noise_cov)
-        right_eye_denoiser = KalmanFilterDenoiser3D(pred_noise_cov=pred_noise_cov,
-                                                    observation_noise_cov=observation_noise_cov)
+        # pred_noise_cov = np.eye(6) * 0.1
+        # observation_noise_cov = np.eye(3) * 0.8
+        # left_eye_denoiser = KalmanFilterDenoiser3D(pred_noise_cov=pred_noise_cov,
+        #                                            observation_noise_cov=observation_noise_cov)
+        # right_eye_denoiser = KalmanFilterDenoiser3D(pred_noise_cov=pred_noise_cov,
+        #                                             observation_noise_cov=observation_noise_cov)
+
+        transition_covariance = 5e-3
+        observation_covariance = 8.0
+        # transition_covariance = 0.01
+        # observation_covariance = 9.0
+        # transition_covariance = 0.01
+        # observation_covariance = 0.75
+        left_eye_denoiser = PyKalmanDenoiser3D(transition_covariance, observation_covariance)
+        right_eye_denoiser = PyKalmanDenoiser3D(transition_covariance, observation_covariance)
 
         # left_eye_denoiser = SimpleDenoiser(decay_per_sec=0.001)
         # right_eye_denoiser = SimpleDenoiser(decay_per_sec=0.001)

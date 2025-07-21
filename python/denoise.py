@@ -120,3 +120,38 @@ class KalmanFilterDenoiser3D(Denoiser[Vec3]):
     
     def get_denoised(self):
         return Vec3(self.state[0], self.state[1], self.state[2])
+
+class PyKalmanDenoiser3D(Denoiser[Vec3]):
+    def __init__(self, transition_covariance: float, observation_covariance: float):
+        import pykalman
+        dt = 1
+        F = np.block([
+            [np.eye(3), dt * np.eye(3)],
+            [np.zeros((3, 3)), np.eye(3)],
+        ])
+        H = np.hstack([np.eye(3), np.zeros((3, 3))])
+        self.state_mean = np.zeros(6)
+        self.state_cov = np.eye(6)
+        self.filter = pykalman.KalmanFilter(
+            transition_matrices=F,
+            observation_matrices=H,
+            transition_covariance=np.eye(6) * transition_covariance,
+            observation_covariance=np.eye(3) * observation_covariance
+        )
+
+    def add(self, sample: Vec3):
+        self.state_mean, self.state_cov = self.filter.filter_update(
+            filtered_state_mean=self.state_mean,
+            filtered_state_covariance=self.state_cov,
+            observation=sample
+        )
+
+    def advance(self, duration_secs: float):
+        self.state_mean, self.state_cov = self.filter.filter_update(
+            filtered_state_mean=self.state_mean,
+            filtered_state_covariance=self.state_cov,
+            observation=None
+        )
+
+    def get_denoised(self) -> Optional[Vec3]:
+        return Vec3(*self.state_mean[:3])
