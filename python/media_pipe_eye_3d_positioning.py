@@ -108,8 +108,12 @@ class MediaPipeEye3DPositioner:
         self._visualization_trail_right = []
 
     def _process_result(self, result: Result, left_eye_denoiser: Denoiser, right_eye_denoiser: Denoiser):
-        left_eye_uv = _landmark_to_vec3(result._face_landmarks[473]).xy
-        right_eye_uv = _landmark_to_vec3(result._face_landmarks[468]).xy
+        # left_eye_uv = _landmark_to_vec3(result._face_landmarks[473]).xy
+        # right_eye_uv = _landmark_to_vec3(result._face_landmarks[468]).xy
+        LEFT_EYE_POINTS = (362, 398, 384, 385, 386, 387, 388, 466, 263, 249, 390, 373, 374, 380, 381, 382)
+        RIGHT_EYE_POINTS = (33, 246, 161, 160, 159, 158, 157, 173, 133, 155, 154, 153, 145, 144, 163, 7)
+        left_eye_uv = sum((_landmark_to_vec3(result._face_landmarks[i]).xy for i in LEFT_EYE_POINTS), start=Vec2()) / len(LEFT_EYE_POINTS)
+        right_eye_uv = sum((_landmark_to_vec3(result._face_landmarks[i]).xy for i in RIGHT_EYE_POINTS), start=Vec2()) / len(RIGHT_EYE_POINTS)
 
         ar = result._frame_view.shape[1] / result._frame_view.shape[0]
         p_scale = Vec2(sin(self.fov_y / 2) * ar, -sin(self.fov_y / 2))
