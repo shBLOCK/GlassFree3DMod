@@ -69,11 +69,12 @@ class Screen3D(
         virtualCamera.rotation.set(virtualOrientation)
         frustumMatrix.rotation(Quaternionf(virtualOrientation.conjugate(Quaterniond())))
         val halfVirtualSize = virtualSize.div(2.0, Vector2d())
+        val left = (-localVirtualCameraPos.x - halfVirtualSize.x) / localVirtualCameraPos.z
+        val right = (-localVirtualCameraPos.x + halfVirtualSize.x) / localVirtualCameraPos.z
+        val bottom = (-localVirtualCameraPos.y - halfVirtualSize.y) / localVirtualCameraPos.z
+        val top = (-localVirtualCameraPos.y + halfVirtualSize.y) / localVirtualCameraPos.z
         projectionMatrix.setFrustum(
-            -localVirtualCameraPos.x - halfVirtualSize.x,
-            -localVirtualCameraPos.x + halfVirtualSize.x,
-            -localVirtualCameraPos.y - halfVirtualSize.y,
-            -localVirtualCameraPos.y + halfVirtualSize.y,
+            left, right, bottom, top,
             zNear, MC.gameRenderer.depthFar.toDouble()
         )
     }
