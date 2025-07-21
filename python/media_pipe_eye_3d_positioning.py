@@ -192,11 +192,11 @@ class MediaPipeEye3DPositioner:
             plt += Line(left_eye_p_std_depth, head_right_dir_q_perpendicular)
             plt += Line(right_eye_p_std_depth, head_right_dir_q_perpendicular)
 
-            plt += Points([result.left_eye_3d], r=8, c="red")
-            plt += Points([result.right_eye_3d], r=8, c="green")
-            plt += Line(Vec3(0), result.left_eye_3d, c="red")
-            plt += Line(Vec3(0), result.right_eye_3d, c="green")
-            plt += Line(result.left_eye_3d, result.right_eye_3d, c="blue")
+            plt += Points([left_eye_3d], r=8, c="red")
+            plt += Points([right_eye_3d], r=8, c="green")
+            plt += Line(Vec3(0), left_eye_3d, c="red")
+            plt += Line(Vec3(0), right_eye_3d, c="green")
+            plt += Line(left_eye_3d, right_eye_3d, c="blue")
 
             # camera frustum
             plt += Lines(
@@ -206,9 +206,9 @@ class MediaPipeEye3DPositioner:
                 alpha=0.5
             )
 
-            plt += Text2D(f"Left:   {_fmt_vec3(result.left_eye_3d)}", c="red", font="VictorMono")
-            plt += Text2D(f"\nRight:  {_fmt_vec3(result.right_eye_3d)}", c="green", font="VictorMono")
-            plt += Text2D(f"\n\nCenter: {_fmt_vec3((result.left_eye_3d + result.right_eye_3d) / 2)}", c="blue", font="VictorMono")
+            plt += Text2D(f"Left:   {_fmt_vec3(left_eye_3d)}", c="red", font="VictorMono")
+            plt += Text2D(f"\nRight:  {_fmt_vec3(right_eye_3d)}", c="green", font="VictorMono")
+            plt += Text2D(f"\n\nCenter: {_fmt_vec3((left_eye_3d + right_eye_3d) / 2)}", c="blue", font="VictorMono")
 
         self._last_3d_visualizers[0] = visualize_3d
 
@@ -278,35 +278,37 @@ class MediaPipeEye3DPositioner:
                 self._last_result.left_eye_3d = left_eye_denoiser.get_denoised()
                 self._last_result.right_eye_3d = right_eye_denoiser.get_denoised()
                 self.result_callback(self._last_result)
-                if self._visualize:
-                    # Record the denoised point in visualization trails
-                    trail_points = 100
-                    self._visualization_trail_left.append(self._last_result.left_eye_3d)
-                    if len(self._visualization_trail_left) > trail_points:
-                        self._visualization_trail_left.pop(0)
-                    self._visualization_trail_right.append(self._last_result.right_eye_3d)
-                    if len(self._visualization_trail_right) > trail_points:
-                        self._visualization_trail_right.pop(0)
 
-            # Visualize the denoised points
-            def visualize_3d(plt: vedo.Plotter):
-                from vedo import Line, Image, Lines, Axes, Points, Text2D
-                if self._last_result != None:
-                    result = self._last_result
+                current_left_eye_3d = self._last_result.left_eye_3d
+                current_right_eye_3d = self._last_result.right_eye_3d
+
+                # Record the denoised point in visualization trails
+                trail_points = 100
+                self._visualization_trail_left.append(current_left_eye_3d)
+                if len(self._visualization_trail_left) > trail_points:
+                    self._visualization_trail_left.pop(0)
+                self._visualization_trail_right.append(current_right_eye_3d)
+                if len(self._visualization_trail_right) > trail_points:
+                    self._visualization_trail_right.pop(0)
+
+                # Visualize the denoised points
+                def visualize_3d(plt: vedo.Plotter):
+                    from vedo import Line, Points
+
                     # Plot points and trails
-                    plt += Points([result.left_eye_3d], r=8, c="#F59E9F")
-                    plt += Points([result.right_eye_3d], r=8, c="#7DDA58")
-                    plt += Line(Vec3(0), result.left_eye_3d, c="#F59E9F")
-                    plt += Line(Vec3(0), result.right_eye_3d, c="#7DDA58")
+                    plt += Points([current_left_eye_3d], r=8, c="#F59E9F")
+                    plt += Points([current_right_eye_3d], r=8, c="#7DDA58")
+                    plt += Line(Vec3(0), current_left_eye_3d, c="#F59E9F")
+                    plt += Line(Vec3(0), current_right_eye_3d, c="#7DDA58")
                     plt += Line(self._visualization_trail_left, c="#F59E9F")
                     plt += Line(self._visualization_trail_right, c="#7DDA58")
 
-            self._last_3d_visualizers[1] = visualize_3d
 
             # Sleep 1/FPS seconds to create a stable FPS
             time.sleep(1/FPS)
             left_eye_denoiser.advance(1/FPS)
             right_eye_denoiser.advance(1/FPS)
+                self._last_3d_visualizers[1] = visualize_3d
 
     def _visualization_thread_main(self):
         # vedo.settings.use_depth_peeling = True
