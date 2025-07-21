@@ -4,22 +4,19 @@ import com.mojang.blaze3d.pipeline.MainTarget
 import com.mojang.blaze3d.platform.GlStateManager
 import com.mojang.blaze3d.systems.RenderSystem
 import com.mojang.blaze3d.vertex.*
-import com.mojang.blaze3d.vertex.VertexFormat
-import com.mojang.blaze3d.vertex.VertexFormatElement
-import dev.shblock.glassfree3d.utils.MC
-import dev.shblock.glassfree3d.utils.MiscUtils
-import dev.shblock.glassfree3d.utils.minus
-import dev.shblock.glassfree3d.utils.plus
-import dev.shblock.glassfree3d.utils.times
-import dev.shblock.glassfree3d.utils.toVec3
+import dev.shblock.glassfree3d.utils.*
 import net.minecraft.client.Camera
 import net.minecraft.client.Minecraft
+import net.minecraft.client.multiplayer.ClientLevel
 import net.minecraft.client.renderer.LevelRenderer
 import net.minecraft.client.renderer.Rect2i
 import net.minecraft.client.renderer.RenderBuffers
 import net.minecraft.client.renderer.ShaderInstance
+import net.minecraft.core.BlockPos
 import net.minecraft.resources.ResourceKey
+import net.minecraft.world.level.ChunkPos
 import net.minecraft.world.level.Level
+import net.minecraft.world.level.block.state.BlockState
 import org.joml.Matrix4d
 import org.joml.Matrix4f
 import org.joml.Quaterniond
@@ -27,6 +24,7 @@ import org.joml.Quaternionf
 import org.joml.Vector2d
 import org.joml.Vector3d
 import org.lwjgl.glfw.GLFW.glfwMakeContextCurrent
+import java.lang.Runtime
 import java.util.*
 
 class Screen3D(
@@ -151,6 +149,7 @@ class Screen3D(
         GlStateManager._colorMask(true, true, true, true)
     }
 
+    @Suppress("FunctionName")
     object Manager {
         private val screens = mutableListOf<Screen3D>()
         private val windows = mutableSetOf<ModWindow>()
@@ -184,6 +183,64 @@ class Screen3D(
                 window.endFrame()
             }
             glfwMakeContextCurrent(MC.window.window)
+        }
+
+        internal fun LR_onChunkLoaded(dim: ResourceKey<Level>, chunkPos: ChunkPos) {
+            levelRenderers[dim]?.apply {
+                onChunkLoaded(chunkPos)
+            }
+        }
+
+        internal fun LR_blockChanged(
+            level: ClientLevel,
+            pos: BlockPos,
+            oldState: BlockState,
+            newState: BlockState,
+            flags: Int
+        ) {
+            levelRenderers[level.dimension()]?.apply {
+                blockChanged(level, pos, oldState, newState, flags)
+            }
+        }
+
+        internal fun LR_setBlockDirty(
+            dim: ResourceKey<Level>,
+            blockPos: BlockPos,
+            oldState: BlockState,
+            newState: BlockState
+        ) {
+            levelRenderers[dim]?.apply {
+                setBlockDirty(blockPos, oldState, newState)
+            }
+        }
+
+        internal fun LR_setSectionDirtyWithNeighbors(
+            dim: ResourceKey<Level>,
+            sectionX: Int,
+            sectionY: Int,
+            sectionZ: Int
+        ) {
+            levelRenderers[dim]?.apply {
+                setSectionDirtyWithNeighbors(sectionX, sectionY, sectionZ)
+            }
+        }
+
+        internal fun LR_destroyBlockProgress(dim: ResourceKey<Level>, breakerId: Int, pos: BlockPos, progress: Int) {
+            levelRenderers[dim]?.apply {
+                destroyBlockProgress(breakerId, pos, progress)
+            }
+        }
+
+        internal fun LR_globalLevelEvent(dim: ResourceKey<Level>, id: Int, pos: BlockPos, data: Int) {
+            levelRenderers[dim]?.apply {
+                globalLevelEvent(id, pos, data)
+            }
+        }
+
+        internal fun LR_levelEvent(dim: ResourceKey<Level>, type: Int, pos: BlockPos, data: Int) {
+            levelRenderers[dim]?.apply {
+                levelEvent(type, pos, data)
+            }
         }
     }
 }
