@@ -277,8 +277,9 @@ class MediaPipeEye3DPositioner:
                 plt.close()
                 return
 
-            #clear
             plt.clear(deep=True)
+            for obj in plt.objects:
+                plt.remove(obj)
 
             visualizer = self._last_3d_visualizer
             if visualizer is not None:

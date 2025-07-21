@@ -6,5 +6,6 @@ dependencies = [
     "mediapipe~=0.10.21",
     "opencv-python",
     "spatium==1.5.5",
-    "vedo==2025.5.4"
+#    "vedo==2025.5.4"
+    "vedo@git+https://github.com/marcomusy/vedo"
 ]

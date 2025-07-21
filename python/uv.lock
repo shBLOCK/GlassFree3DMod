@@ -119,7 +119,7 @@ requires-dist = [
     { name = "mediapipe", specifier = "~=0.10.21" },
     { name = "opencv-python" },
     { name = "spatium", specifier = "==1.5.5" },
-    { name = "vedo", specifier = "==2025.5.4" },
+    { name = "vedo", git = "https://github.com/marcomusy/vedo" },
 ]
 
 [[package]]
@@ -468,17 +468,13 @@ wheels = [
 
 [[package]]
 name = "vedo"
-version = "2025.5.4"
-source = { registry = "https://pypi.org/simple" }
+version = "2025.5.4+dev04"
+source = { git = "https://github.com/marcomusy/vedo#33add62ae0f2e8370b668ad710093bd9f2754518" }
 dependencies = [
     { name = "numpy" },
     { name = "pygments" },
     { name = "typing-extensions" },
     { name = "vtk" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/74/cb/15d78ab5930ea09664f9834645372bca4963c78510be422df812804f72de/vedo-2025.5.4.tar.gz", hash = "sha256:feb585782b99f44f8d2890e689418d593bdeefc2f8c58a80aa2d9ec3a39253a4", size = 2714801, upload-time = "2025-06-10T10:48:57.803Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/2b/cb/59ae2781a91ba8cf8c1860af7d7164dd7ce3a59ab46032cbf33a150dd591/vedo-2025.5.4-py3-none-any.whl", hash = "sha256:929328886304aeadd64ef80bba39306a49fb1fa9df1628f231fbf0edeedd420e", size = 2833510, upload-time = "2025-06-10T10:48:54.206Z" },
 ]
 
 [[package]]
