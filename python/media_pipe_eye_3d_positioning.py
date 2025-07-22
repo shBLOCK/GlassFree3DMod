@@ -119,6 +119,27 @@ class MediaPipeEye3DPositioner:
         self._visualization_trail_left = []
         self._visualization_trail_right = []
 
+    def _calc_eye_3d_from_2d(self, left_eye_p: Vec3, right_eye_p: Vec3, head_right_dir: Vec3) -> tuple[Vec3, Vec3]:
+        """Calculate the two eyes' 3D positions based on their 2D position on the image and the head's direction"""
+        # normal vector of the q plane (plane formed by origin, left_eye_p and right_eye_p)
+        q_normal = (left_eye_p ^ right_eye_p).normalized
+
+        # head_right_dir, projected into the p plane
+        head_right_dir_q = (head_right_dir - q_normal * (head_right_dir @ q_normal)).normalized
+
+        head_right_dir_q_perpendicular = (q_normal ^ head_right_dir_q).normalized
+
+        # left_eye_p & right_eye_p with standard depth (has projection length of one when projected onto head_right_dir_q_perpendicular)
+        left_eye_p_std_depth = left_eye_p / (left_eye_p @ head_right_dir_q_perpendicular)
+        right_eye_p_std_depth = right_eye_p / (right_eye_p @ head_right_dir_q_perpendicular)
+
+        eyes_p_distance_at_std_depth = left_eye_p_std_depth | right_eye_p_std_depth
+        eyes_depth_scale = self.std_eye_distance / eyes_p_distance_at_std_depth
+
+        left_eye_3d = left_eye_p_std_depth * eyes_depth_scale
+        right_eye_3d = right_eye_p_std_depth * eyes_depth_scale
+        return left_eye_3d, right_eye_3d
+
     def _process_result(self, result: Result):
         # left_eye_uv = _landmark_to_vec3(result._face_landmarks[473]).xy
         # right_eye_uv = _landmark_to_vec3(result._face_landmarks[468]).xy
@@ -136,29 +157,33 @@ class MediaPipeEye3DPositioner:
         left_eye_p = Vec3(left_eye_p_2d, -1)
         right_eye_p = Vec3(right_eye_p_2d, -1)
 
-        # normal vector of the q plane (plane formed by origin, left_eye_p and right_eye_p)
-        q_normal = (left_eye_p ^ right_eye_p).normalized
-
         head_right_dir = result._face_transform.x
-        # head_right_dir, projected into the p plane
-        head_right_dir_q = (head_right_dir - q_normal * (head_right_dir @ q_normal)).normalized
 
-        head_right_dir_q_perpendicular = (q_normal ^ head_right_dir_q).normalized
-
-        # left_eye_p & right_eye_p with standard depth (has projection length of one when projected onto head_right_dir_q_perpendicular)
-        left_eye_p_std_depth = left_eye_p / (left_eye_p @ head_right_dir_q_perpendicular)
-        right_eye_p_std_depth = right_eye_p / (right_eye_p @ head_right_dir_q_perpendicular)
-
-        eyes_p_distance_at_std_depth = left_eye_p_std_depth | right_eye_p_std_depth
-        eyes_depth_scale = self.std_eye_distance / eyes_p_distance_at_std_depth
-
-        left_eye_3d = left_eye_p_std_depth * eyes_depth_scale
-        right_eye_3d = right_eye_p_std_depth * eyes_depth_scale
+        left_eye_3d, right_eye_3d = self._calc_eye_3d_from_2d(left_eye_p, right_eye_p, head_right_dir)
 
         result.left_eye_3d = left_eye_3d
         result.right_eye_3d = right_eye_3d
 
         self._processed_results_queue.put(result)
+
+        left_eye_2d_samples = []
+        right_eye_2d_samples = []
+        left_eye_3d_samples = []
+        right_eye_3d_samples = []
+        N = 100
+        RAND_SCALE = 2e-3
+        for _ in range(N):
+            new_left_eye_p = Vec3(left_eye_p)
+            new_right_eye_p = Vec3(right_eye_p)
+            new_left_eye_p.x += np.random.randn() * RAND_SCALE
+            new_left_eye_p.y += np.random.randn() * RAND_SCALE
+            new_right_eye_p.x += np.random.randn() * RAND_SCALE
+            new_right_eye_p.y += np.random.randn() * RAND_SCALE
+            new_left_eye_3d, new_right_eye_3d = self._calc_eye_3d_from_2d(new_left_eye_p, new_right_eye_p, head_right_dir)
+            left_eye_2d_samples.append(new_left_eye_p)
+            right_eye_2d_samples.append(new_right_eye_p)
+            left_eye_3d_samples.append(new_left_eye_3d)
+            right_eye_3d_samples.append(new_right_eye_3d)
 
         def visualize_3d(plt: vedo.Plotter):
             from vedo import Line, Image, Lines, Axes, Points, Text2D
@@ -193,17 +218,23 @@ class MediaPipeEye3DPositioner:
             plt += Points([left_eye_p], c="red")
             plt += Points([right_eye_p], c="green")
 
-            plt += Line(Vec3(0), head_right_dir_q_perpendicular)
-            plt += Points([left_eye_p_std_depth], c="blue")
-            plt += Points([right_eye_p_std_depth], c="blue")
-            plt += Line(left_eye_p_std_depth, head_right_dir_q_perpendicular)
-            plt += Line(right_eye_p_std_depth, head_right_dir_q_perpendicular)
+            # plt += Line(Vec3(0), head_right_dir_q_perpendicular)
+            # plt += Points([left_eye_p_std_depth], c="blue")
+            # plt += Points([right_eye_p_std_depth], c="blue")
+            # plt += Line(left_eye_p_std_depth, head_right_dir_q_perpendicular)
+            # plt += Line(right_eye_p_std_depth, head_right_dir_q_perpendicular)
 
             plt += Points([left_eye_3d], r=8, c="red")
             plt += Points([right_eye_3d], r=8, c="green")
             plt += Line(Vec3(0), left_eye_3d, c="red")
             plt += Line(Vec3(0), right_eye_3d, c="green")
             plt += Line(left_eye_3d, right_eye_3d, c="blue")
+
+            # Sample random points to measure the variance and covariance of observed x, y, and z
+            plt += Points(left_eye_2d_samples, c="gray")
+            plt += Points(right_eye_2d_samples, c="gray")
+            plt += Points(left_eye_3d_samples, c="gray")
+            plt += Points(right_eye_3d_samples, c="gray")
 
             # camera frustum
             plt += Lines(
@@ -267,27 +298,39 @@ class MediaPipeEye3DPositioner:
                 # print(f"FPS: {1000 / (time_ms - last_time_ms)}")
                 last_time_ms = time_ms
 
+
     def _denoise_thread_main(self):
         UPSAMPLE = 2
 
-        # pred_noise_cov = np.eye(6) * 0.1
-        # observation_noise_cov = np.eye(3) * 0.8
-        # left_eye_denoiser = KalmanFilterDenoiser3D(pred_noise_cov=pred_noise_cov,
-        #                                            observation_noise_cov=observation_noise_cov)
-        # right_eye_denoiser = KalmanFilterDenoiser3D(pred_noise_cov=pred_noise_cov,
-        #                                             observation_noise_cov=observation_noise_cov)
+        pred_noise_cov = np.eye(6) * 0.1
+        obs_cov_mult = 0.8
+        observation_noise_cov = np.eye(3) * obs_cov_mult
+        left_eye_denoiser = KalmanFilterDenoiser3D(pred_noise_cov=pred_noise_cov,
+                                                   observation_noise_cov=observation_noise_cov)
+        right_eye_denoiser = KalmanFilterDenoiser3D(pred_noise_cov=pred_noise_cov,
+                                                    observation_noise_cov=observation_noise_cov)
 
-        transition_covariance = 5e-3
-        observation_covariance = 8.0
+        # transition_covariance = 5e-3
+        # observation_covariance = 20.0
         # transition_covariance = 0.01
         # observation_covariance = 9.0
         # transition_covariance = 0.01
         # observation_covariance = 0.75
-        left_eye_denoiser = PyKalmanDenoiser3D(transition_covariance, observation_covariance)
-        right_eye_denoiser = PyKalmanDenoiser3D(transition_covariance, observation_covariance)
+        # left_eye_denoiser = PyKalmanDenoiser3D(transition_covariance, observation_covariance)
+        # right_eye_denoiser = PyKalmanDenoiser3D(transition_covariance, observation_covariance)
 
         # left_eye_denoiser = SimpleDenoiser(decay_per_sec=0.001)
         # right_eye_denoiser = SimpleDenoiser(decay_per_sec=0.001)
+
+        def get_eye_covariance(pos: Vec3, multiplier: float = 1.0) -> np.ndarray:
+            scale = pos.length / 10    # TODO: 
+            z = pos.normalized
+            tmp = Vec3(*np.random.randn(3))
+            x = (z ^ tmp).normalized
+            y = (z ^ x).normalized
+            mat = np.array([x, y, z]).T
+            cov_mat_world = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, scale]])
+            return (mat @ cov_mat_world @ mat.T) * multiplier
 
         while True:
             sample = self._processed_results_queue.get()
@@ -296,8 +339,13 @@ class MediaPipeEye3DPositioner:
 
             # sample
             last_time = time.monotonic()
-            left_eye_denoiser.add(sample.left_eye_3d)
-            right_eye_denoiser.add(sample.right_eye_3d)
+            left_eye_cov = get_eye_covariance(sample.left_eye_3d, multiplier=obs_cov_mult)
+            right_eye_cov = get_eye_covariance(sample.right_eye_3d, multiplier=obs_cov_mult)
+            # print("\033c", left_eye_cov, "\n\n", right_eye_cov)
+            # left_eye_denoiser.add(sample.left_eye_3d)
+            # right_eye_denoiser.add(sample.right_eye_3d)
+            left_eye_denoiser.add_with_cov(sample.left_eye_3d, left_eye_cov)
+            right_eye_denoiser.add_with_cov(sample.right_eye_3d, right_eye_cov)
 
             # predictions
             for phase in range(UPSAMPLE):

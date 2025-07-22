@@ -109,6 +109,13 @@ class KalmanFilterDenoiser3D(Denoiser[Vec3]):
     def add(self, sample: Vec3):
         self.last_sample = sample
 
+    def add_with_cov(self, sample: Vec3, observation_cov: np.ndarray):
+        self.last_sample = sample
+        if observation_cov.shape == (3, 3):
+            self.observation_noise_cov = observation_cov
+        else:
+            raise f"Invalid shape for observation covariance matrix: {observation_cov.shape}"
+
     def advance(self, duration_secs: float):
         pred_state, pred_cov = self.kf_predict(duration_secs)
         if self.last_sample != None:
@@ -132,11 +139,12 @@ class PyKalmanDenoiser3D(Denoiser[Vec3]):
         H = np.hstack([np.eye(3), np.zeros((3, 3))])
         self.state_mean = np.zeros(6)
         self.state_cov = np.eye(6)
+        observation_covariance_mat = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 8.0]]) * observation_covariance
         self.filter = pykalman.KalmanFilter(
             transition_matrices=F,
             observation_matrices=H,
             transition_covariance=np.eye(6) * transition_covariance,
-            observation_covariance=np.eye(3) * observation_covariance
+            observation_covariance=observation_covariance_mat
         )
 
     def add(self, sample: Vec3):
