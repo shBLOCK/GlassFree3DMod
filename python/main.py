@@ -4,6 +4,7 @@ import time
 from math import radians
 from threading import Thread
 import json
+import datetime as dt
 
 import cv2
 
@@ -11,7 +12,7 @@ from media_pipe_eye_3d_positioning import MediaPipeEye3DPositioner
 from spatium import *
 
 
-packet_queue = queue.Queue(60)
+packet_queue: queue.Queue[str] = queue.Queue(60)
 
 def server_thread_main():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
@@ -39,7 +40,8 @@ def main():
     def result_callback(result: MediaPipeEye3DPositioner.Result):
         packet = json.dumps({
             "left_eye_3d": vec3_json(result.left_eye_3d),
-            "right_eye_3d": vec3_json(result.right_eye_3d)
+            "right_eye_3d": vec3_json(result.right_eye_3d),
+            "time": dt.datetime.now().timestamp(),
         }) + "\n"
         try:
             packet_queue.put_nowait(packet)

@@ -5,5 +5,9 @@
 __pycache__/
 /.gradle/
 
+# Logs
+log/
+logs/
+
 # Device-specifc constants
 src/main/kotlin/dev/shblock/glassfree3d/Consts.kt
