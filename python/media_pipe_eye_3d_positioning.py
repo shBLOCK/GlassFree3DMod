@@ -236,6 +236,9 @@ class MediaPipeEye3DPositioner:
             plt += Points(left_eye_3d_samples, c="gray")
             plt += Points(right_eye_3d_samples, c="gray")
 
+            # Landmarks
+            plt += Points([((_landmark_to_vec3(landmark) - Vec3(0.0, 1.0, 0.0)) * Vec3(2.0, -2.0, -2.0) * Vec3(image_half_size, 1.0) - Vec3(image_half_size, 0.5)) for landmark in result._face_landmarks], c="pink")
+
             # camera frustum
             plt += Lines(
                 start_pts=[Vec3(0)] * 4,

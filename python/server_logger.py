@@ -3,6 +3,19 @@ import json
 import time
 import os
 import datetime as dt
+import pandas as pd
+import numpy as np
+import vedo
+
+def visualize_dataframe(filename: str):
+    df = pd.read_csv(filename)
+    N = df.shape[0]
+    left_eye = df.loc[:, ["left_x", "left_y", "left_z"]].to_numpy()
+    right_eye = df.loc[:, ["right_x", "right_y", "right_z"]].to_numpy()
+    plt = vedo.Plotter(size=(1280, 800), interactive=True)
+    plt += vedo.Line(left_eye, c="red")
+    plt += vedo.Line(right_eye, c="green")
+    plt.show(axes=2)
 
 def main():
     filename = dt.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
@@ -54,3 +67,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    # visualize_dataframe(os.path.join("log", "data-2025-07-23-13-07-00.csv"))
