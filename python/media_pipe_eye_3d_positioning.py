@@ -10,7 +10,7 @@ from threading import Thread
 import mediapipe as mp
 import cv2
 import numpy as np
-from numpy import sin
+from numpy import sin, tan
 import vedo
 from spatium import *
 from mediapipe.tasks.python.components.containers import landmark as landmark_module
@@ -151,7 +151,7 @@ class MediaPipeEye3DPositioner:
                            start=Vec2()) / len(RIGHT_EYE_POINTS)
 
         ar = result._frame_view.shape[1] / result._frame_view.shape[0]
-        p_scale = Vec2(sin(self.fov_y / 2) * ar, -sin(self.fov_y / 2))
+        p_scale = Vec2(tan(self.fov_y / 2) * ar, -tan(self.fov_y / 2))
         left_eye_p_2d = (left_eye_uv - 0.5) * 2 * p_scale
         right_eye_p_2d = (right_eye_uv - 0.5) * 2 * p_scale
         left_eye_p = Vec3(left_eye_p_2d, -1)
