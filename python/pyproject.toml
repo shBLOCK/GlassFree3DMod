@@ -10,4 +10,5 @@ dependencies = [
     "vedo@git+https://github.com/marcomusy/vedo",
     "pykalman==0.10.1",
     "pandas>=2.3.1",
+    "pupil-apriltags>=1.0.4.post11",
 ]

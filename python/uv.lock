@@ -111,6 +111,7 @@ dependencies = [
     { name = "mediapipe" },
     { name = "opencv-python" },
     { name = "pandas" },
+    { name = "pupil-apriltags" },
     { name = "pykalman" },
     { name = "spatium" },
     { name = "vedo" },
@@ -121,6 +122,7 @@ requires-dist = [
     { name = "mediapipe", specifier = "~=0.10.21" },
     { name = "opencv-python" },
     { name = "pandas", specifier = ">=2.3.1" },
+    { name = "pupil-apriltags", specifier = ">=1.0.4.post11" },
     { name = "pykalman", specifier = "==0.10.1" },
     { name = "spatium", specifier = "==1.5.5" },
     { name = "vedo", git = "https://github.com/marcomusy/vedo" },
@@ -365,6 +367,20 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/bd/6d/a4a198b61808dd3d1ee187082ccc21499bc949d639feb948961b48be9a7e/protobuf-4.25.8-cp37-abi3-manylinux2014_aarch64.whl", hash = "sha256:9ad7ef62d92baf5a8654fbb88dac7fa5594cfa70fd3440488a5ca3bfc6d795a7", size = 294005, upload-time = "2025-05-28T14:22:16.052Z" },
     { url = "https://files.pythonhosted.org/packages/d6/c6/c9deaa6e789b6fc41b88ccbdfe7a42d2b82663248b715f55aa77fbc00724/protobuf-4.25.8-cp37-abi3-manylinux2014_x86_64.whl", hash = "sha256:83e6e54e93d2b696a92cad6e6efc924f3850f82b52e1563778dfab8b355101b0", size = 294924, upload-time = "2025-05-28T14:22:17.105Z" },
     { url = "https://files.pythonhosted.org/packages/0c/c1/6aece0ab5209981a70cd186f164c133fdba2f51e124ff92b73de7fd24d78/protobuf-4.25.8-py3-none-any.whl", hash = "sha256:15a0af558aa3b13efef102ae6e4f3efac06f1eea11afb3a57db2901447d9fb59", size = 156757, upload-time = "2025-05-28T14:22:24.135Z" },
+]
+
+[[package]]
+name = "pupil-apriltags"
+version = "1.0.4.post11"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b9/d2/06ec5cd9ad9835ebd7e8f28b2a4c808215fca39e180dc4f95f26b98a45e7/pupil_apriltags-1.0.4.post11.tar.gz", hash = "sha256:18980da3d3a341e94401cac341768dd453c992d9f0e19a9e6dfdd5c326ff46c4", size = 1914282, upload-time = "2025-04-22T15:21:10.88Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f0/98/bb4ab70e6799b738008ddb8113f32713fec022c1988878b8381e8b373123/pupil_apriltags-1.0.4.post11-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:1b5ebe9262fe07ff16fbdcbbde78e4b04b01e32da2ec148e10d129229a1e225a", size = 7774435, upload-time = "2025-04-22T15:20:43.686Z" },
+    { url = "https://files.pythonhosted.org/packages/d4/dd/7c0dc064274a717a8f1306428e6c6bd86d8a285b959fea880351bb0f65db/pupil_apriltags-1.0.4.post11-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:eb7a4f1228b71dbb94ba26f16ffc6378cf86b6be8ebb7a4b7d3d4a48aa121916", size = 4931854, upload-time = "2025-04-22T15:20:45.222Z" },
+    { url = "https://files.pythonhosted.org/packages/d2/15/7dad87bbbdac51e2b7e6ed7c88bbdf4ac638631776a1b67a7ee93fad671b/pupil_apriltags-1.0.4.post11-cp312-cp312-win_amd64.whl", hash = "sha256:9c7401e008a2d0725167a08398764dd9b1a35085aad79e9ae8ea8b2e19f00c1e", size = 2051846, upload-time = "2025-04-22T15:20:46.678Z" },
 ]
 
 [[package]]
