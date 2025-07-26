@@ -6,8 +6,12 @@ from spatium import *
 import vedo
 from math import radians
 from scipy import linalg
+import queue
 from queue import Queue
 import socket
+import datetime as dt
+import json
+from threading import Thread
 
 def homogeneous_vec(vec: np.ndarray):
     # vec: (3, N)
@@ -190,8 +194,32 @@ def locate_by_PnP(tags: list[apriltags.Detection], object: TaggedObject, camera:
     rotation_mat, jacobian = cv2.Rodrigues(rotation_vec)
     return Transform3D(*rotation_mat.flatten("F"), *translation_vec.flatten())
 
+def server_thread_main(queue: Queue[str], port: int = 30002):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", port))
+        print(f"Server started at port {port}")
+        while True:
+            sock.listen()
+            conn, addr = sock.accept()
+            with conn:
+                print(f"Accepted client: {addr}")
+                while True:
+                    try:
+                        conn.sendall(queue.get().encode())
+                    except OSError as e:
+                        print(f"Failed to send packet: {e}")
+                        break
+
 def bgr_to_rgb(bgr: tuple) -> tuple:
     return (bgr[2], bgr[1], bgr[0])
+
+def transform_to_json(t: Transform3D) -> dict:
+    return {
+        "rx": [*t.x],
+        "ry": [*t.y],
+        "rz": [*t.z],
+        "t": [*t.origin],
+    }
 
 APRILTAG_EDGE_COLORS = list(map(bgr_to_rgb, [
     (231, 17, 19),
@@ -202,11 +230,6 @@ APRILTAG_EDGE_COLORS = list(map(bgr_to_rgb, [
 
 MAX_DISCONNECTED_CNT = 6
 
-def server_thread(queue: Queue):
-    # with 
-    # TODO
-    pass
-
 def main():
     plt = vedo.Plotter(size=(1280, 800), interactive=True)
     detector = apriltags.Detector(families="tag36h11", nthreads=1, quad_decimate=2.0, quad_sigma=0.0, refine_edges=1, decode_sharpening=0.6, debug=0)
@@ -216,6 +239,7 @@ def main():
     cam.set(cv2.CAP_PROP_FRAME_HEIGHT, camera_data.resolution.y)
     x_scaling, y_scaling = get_camera_scaling(camera_data)
 
+    # TODO: load these objects from a file instead of hardcoding them in here
     screen_obj = TaggedObject(name="handhold screen", tags={
         0: (28, Transform3D.translating(Vec3(-42.4, -21.5, 0.0))),
         1: (28, Transform3D.translating(Vec3(42.4, -21.5, 0.0))),
@@ -231,6 +255,11 @@ def main():
     })
     object_to_detect = [screen_obj, wand_obj]
 
+    packet_queue: Queue[str] = Queue()
+    server_thread = Thread(target=server_thread_main, args=(packet_queue,), name="Server thread", daemon=True)
+    server_thread.start()
+
+    # update function in the main thread
     def update(*_):
         nonlocal plt
         for obj in plt.objects:
@@ -258,6 +287,18 @@ def main():
                     plt += vedo.Line(points, c="red")
                     for point in points[:4]:
                         plt += vedo.Line([-point / point.z, point], c="black")
+                    
+                    # send the data to the server
+                    timestamp = dt.datetime.now().timestamp()
+                    packet = json.dumps({
+                        "name": obj.name,
+                        "transform": transform_to_json(obj_transform),
+                        "time": timestamp,
+                    }) + "\n"
+                    try:
+                        packet_queue.put_nowait(packet)
+                    except queue.Full:
+                        print("Packet queue full")
         
         # visualize
         plt += vedo.Axes(
@@ -283,6 +324,7 @@ def main():
     plt.timer_callback("create", dt=1)
     plt.parallel_projection()
     plt.show(viewup="y", title="MediaPipeEye3DPositioner")
+    server_thread.join()
 
 if __name__ == "__main__":
     main()
