@@ -7,8 +7,6 @@ import vedo
 from math import radians
 from scipy import linalg
 
-from denoise import Denoiser, KalmanFilterDenoiser3D
-
 def homogeneous_vec(vec: np.ndarray):
     # vec: (3, N)
     dim = vec.shape[0]
@@ -18,14 +16,10 @@ def homogeneous_vec(vec: np.ndarray):
 
 @dataclass
 class Camera:
+    """Parameters of a camera"""
     resolution: Vec2i
     fov_x: float | None
     fov_y: float | None
-
-@dataclass
-class DenoiserState:
-    denoiser: list[Denoiser[Vec3]]
-    disconnect_cnt: int
 
 def get_camera_scaling(camera: Camera) -> tuple[float, float]:
     x_scaling = 0.0
@@ -43,109 +37,94 @@ def get_camera_scaling(camera: Camera) -> tuple[float, float]:
         y_scaling = np.tan(camera.fov_y / 2)
     return (x_scaling, y_scaling)
 
-def direction_vector(camera: Camera, points: np.ndarray):
-    """
-    Get the normalized 3d direction vector of a point on the image taken by a camera
-
-    # Arguments
-    - `camera`: The parameters of the camera
-    - `points`: a numpy array of dimension (N, 2), where N is the number of points to be calculated.
-    """
-    n = points.shape[0]
+def get_camera_matrix(camera: Camera) -> np.ndarray:
+    """Get the conversion matrix between the camera frame (x, y, z) to the image frame (unit: pixel)"""
     x_scaling, y_scaling = get_camera_scaling(camera)
-    half_resolution = np.array([camera.resolution.x, camera.resolution.y], dtype=np.float64) * 0.5
-    half_resolution = np.repeat(half_resolution.reshape((1, 2)), axis=0, repeats=n)
-    uv = (points - half_resolution) / half_resolution
-    uv[:, 1] = -uv[:, 1]
-    scaled_pts = np.concatenate([uv, -np.ones((n, 1))], axis=1)  # set all z values to -1
-    scaled_pts[:, 0] *= x_scaling
-    scaled_pts[:, 1] *= y_scaling
-    return scaled_pts / np.linalg.norm(scaled_pts, axis=1, keepdims=True)
+    uv_to_image = np.array([
+        [camera.resolution.x/2, 0.0, camera.resolution.x/2],
+        [0.0, camera.resolution.y/2, camera.resolution.y/2],
+        [0.0, 0.0, 1.0],
+    ])
+    world_to_uv = np.array([[1/x_scaling, 0.0, 0.0], [0.0, -1/y_scaling, 0.0], [0.0, 0.0, 1.0]])
+    return uv_to_image @ world_to_uv
 
-def bgr_to_rgb(bgr: tuple) -> tuple:
-    return (bgr[2], bgr[1], bgr[0])
+def get_inv_camera_matrix(camera: Camera) -> np.ndarray:
+    """Get the conversion matrix between image frame (unit: pixel) to camera 3D frame (x, y, z)"""
+    x_scaling, y_scaling = get_camera_scaling(camera)
+    image_to_uv = np.array([
+        [2/camera.resolution.x, 0.0, -1.0],
+        [0.0, 2/camera.resolution.y, -1.0],
+        [0.0, 0.0, 1.0],
+    ])
+    uv_to_world = np.array([[x_scaling, 0.0, 0.0], [0.0, -y_scaling, 0.0], [0.0, 0.0, 1.0]])
+    return uv_to_world @ image_to_uv
 
-def locate(id: int, tag: apriltags.Detection | None, camera: Camera, scale: float, denoisers: dict[int, DenoiserState] | None = None, plt: vedo.Plotter | None = None):
-    # `denoiser` records the mapping between apriltag id and their corresponding denoiser state.
-    # a denoiser state is defined by a denoiser object and an integer -- disconnected frame count.
-    # disconnected frame count records the number of frames since the last time an april tag is
-    # detected.
+@dataclass
+class TaggedObject:
+    """An object that uses apriltags to locate."""
+    name: str
+    tags: dict[int, tuple[float, Transform3D]]  # records the mapping from tag IDs to their scale and relative transformation from the object's center
 
+def get_simple_tag_object(name: str, id: int, scale: float):
+    """Get a simple object with only one tag. Use the center of the tag as the object's center."""
+    return TaggedObject(name=name, tags=dict([(id, (scale, Transform3D()))]))
+
+def locate(id: int, tag: apriltags.Detection, camera: Camera, scale: float, plt: vedo.Plotter | None = None):
+    # # `denoiser` records the mapping between apriltag id and their corresponding denoiser state.
+    # # a denoiser state is defined by a denoiser object and an integer -- disconnected frame count.
+    # # disconnected frame count records the number of frames since the last time an april tag is
+    # # detected.
+    # --- Deprecated (2025.7.6)
+
+    inv_camera_mat = get_inv_camera_matrix(camera)
     point_cam_frame: np.ndarray
+    # order: center, left (-x), right (+x), up (-y), down (+y), UL, UR, DL, DR
+    # dimension: (3, 9)
     points = np.array([
         [0., -1.,  1.,  0.,  0., -1.,  1., -1.,  1.,],
         [0.,  0.,  0., -1.,  1., -1., -1.,  1.,  1.,],
         [1.,  1.,  1.,  1.,  1.,  1.,  1.,  1.,  1.,],
     ])
 
-    if tag != None:
-        # Use the detected positions to update the tag
-        homography = tag.homography
-        # order: center, left (-x), right (+x), up (-y), down (+y), UL, UR, DL, DR
-        point_cam_frame = homogeneous_vec(homography @ points)[:2, :].T  # dim: (N, 2)
+    # Use the detected positions to update the tag
+    homography = tag.homography
+    point_cam_frame = homogeneous_vec(inv_camera_mat @ homography @ points)    # dim: (3, N)
+    # if plt != None:
+    #     plt += vedo.Points(-homogeneous_vec(point_cam_frame).T, c="red")
 
-        if denoisers != None:
-            # denoise
-            if id not in denoisers:
-                # Add a denoiser
-                pred_noise_cov = np.eye(6) * 1.0
-                obs_cov_mult = 1e-4
-                observation_noise_cov = np.eye(3) * obs_cov_mult
-                denoisers[id] = DenoiserState(
-                    denoiser=[
-                        KalmanFilterDenoiser3D(pred_noise_cov=pred_noise_cov.copy(), observation_noise_cov=observation_noise_cov.copy()) for _ in range(9)
-                    ],
-                    disconnect_cnt=0,
-                )
-            denoisers[id].disconnect_cnt = 0
-            denoiser = denoisers[id].denoiser
-            for i in range(9):
-                denoiser[i].add(Vec3(*point_cam_frame[i, :], 0.0))
-                denoiser[i].advance(1 / 30)
-                point_cam_frame[i, :] = np.array(denoiser[i].get_denoised().xy)
-    elif denoisers != None:
-        # if tag is none, use the denoiser to calculate the camera
-        point_cam_frame = np.zeros((points.shape[1], 2))
-        denoiser = denoisers[id].denoiser
-        for i in range(points.shape[1]):
-            denoiser[i].advance(1 / 30)
-            point_cam_frame[i, :] = np.array(denoiser[i].get_denoised().xy)
-
-    else:
-        raise f"You must have either a valid tag or a denoiser"
-
-    def get_edge_direction_vec(vecs) -> np.ndarray:
+    def get_edge_direction_vec(endpoints, midpoint) -> np.ndarray:
         nonlocal plt
         """
         Get the direction vector of an edge defined in apriltag space
 
         # Arguments
-        - `vecs` (N, 2): a stack of vectors in the order of starting point, ending point, and midpoint.
+        - `endpoints` (3, 2): a stack of vectors in the order of starting point and ending point.
+        - `midpoint` (3,): a vector pointing to the direction of midpoint.
         """
-        tmp: np.ndarray = direction_vector(camera, vecs)
-        start_vec = tmp[0, :].copy()
-        end_vec = tmp[1, :].copy()
-        mid_vec = tmp[2, :].copy()
-        if plt != None:
-            plt += vedo.Line([np.array([0., 0., 0.]), start_vec * 10], c="red")
-            plt += vedo.Line([np.array([0., 0., 0.]), end_vec * 10], c="green")
-            plt += vedo.Line([np.array([0., 0., 0.]), mid_vec * 10], c="blue")
-        _A = tmp[:2, :].T
-        _y = tmp[2, :] * 2
+        start_vec = endpoints[:, 0].copy()
+        end_vec = endpoints[:, 1].copy()
+        _A = endpoints
+        _y = midpoint
         solution = np.linalg.inv(_A.T @ _A) @ _A.T @ _y
-        direction: np.ndarray = solution[0] * start_vec - mid_vec
+        direction: np.ndarray = solution[0] * start_vec - midpoint * 0.5
+        # if plt != None:
+            # plt += vedo.Line([Vec3(), Vec3(*start_vec)], c="red")
+            # plt += vedo.Line([Vec3(), Vec3(*end_vec)], c="green")
+            # plt += vedo.Line([Vec3(), Vec3(*mid_vec)], c="blue")
+            # plt += vedo.Line([Vec3(), direction], c="orange")
         return direction / np.linalg.norm(direction)
 
-    dir_x = get_edge_direction_vec(point_cam_frame[[1, 2, 0], :])
-    dir_y = get_edge_direction_vec(point_cam_frame[[3, 4, 0], :])
+    dir_x = get_edge_direction_vec(point_cam_frame[:, [1, 2]], point_cam_frame[:, 0])
+    dir_y = get_edge_direction_vec(point_cam_frame[:, [3, 4]], point_cam_frame[:, 0])
     dir_z = np.cross(dir_x, dir_y)
-    dir_z /=  np.linalg.norm(dir_z)
-    # print(np.linalg.norm(dir_x), np.linalg.norm(dir_y), np.linalg.norm(dir_z))
-    # if plt != None:
-    #     plt += vedo.Line([np.array([0., 0., 0.]), dir_z], c="blue")
+    dir_z /= np.linalg.norm(dir_z)
+    if plt != None:
+        plt += vedo.Line([np.zeros(3), dir_x], c="red")
+        plt += vedo.Line([np.zeros(3), dir_y], c="green")
+        plt += vedo.Line([np.zeros(3), dir_z], c="blue")
     
     # Take a section of the frustum with the plane perpendicular to the dir_z vector
-    frustum_corners: np.ndarray = direction_vector(camera, point_cam_frame[5:, :])  # shape: (4, 3)
+    frustum_corners: np.ndarray = (point_cam_frame[:, 5:]).T  # shape: (4, 3)
     ts = frustum_corners @ dir_z
     ts = np.repeat(ts.reshape((-1, 1)), repeats=3, axis=1)
     points = frustum_corners / ts
@@ -163,7 +142,53 @@ def locate(id: int, tag: apriltags.Detection | None, camera: Camera, scale: floa
         plt += vedo.Point(center, c="blue")
         for i in range(points.shape[0]):
             plt += vedo.Point(points[i, :], c="red")
+    
+    # # generate random points to check the variation
+    # N = 100
+    # for _ in range(N):
+    #     new_point_cam_frame = point_cam_frame + np.random.randn(*point_cam_frame.shape) * 0.002
+    #     new_dir_x = get_edge_direction_vec(new_point_cam_frame[:, [1, 2]], new_point_cam_frame[:, 0])
+    #     new_dir_y = get_edge_direction_vec(new_point_cam_frame[:, [3, 4]], new_point_cam_frame[:, 0])
+    #     new_dir_z = np.cross(new_dir_x, new_dir_y)
+    #     new_dir_z /= np.linalg.norm(new_dir_z)
+    #     if plt != None:
+    #         plt += vedo.Points(-homogeneous_vec(new_point_cam_frame).T, c="yellow")
+    #         plt += vedo.Line([np.zeros(3), new_dir_z], c="gray")
     return Transform3D(*dir_x, *dir_y, *dir_z, *center)
+
+def locate_by_PnP(tags: list[apriltags.Detection], object: TaggedObject, camera: Camera, plt: vedo.Plotter | None = None) -> Transform3D | None:
+    APRILTAG_CORNER_ORDER = [
+        Vec3(-0.5, 0.5, 0.0),
+        Vec3(0.5, 0.5, 0.0),
+        Vec3(0.5, -0.5, 0.0),
+        Vec3(-0.5, -0.5, 0.0),
+    ]
+    camera_mat = get_camera_matrix(camera)
+    distortion = np.zeros(5)
+    object_points = []
+    image_points = []
+    for tag in tags:
+        if tag.tag_id in object.tags:
+            scale, tag_in_obj = object.tags[tag.tag_id]
+            # The object requires the tag to locate
+            for i in range(4):
+                object_points.append(tag_in_obj(APRILTAG_CORNER_ORDER[i] * scale))
+                image_points.append(tag.corners[i])
+    object_points = np.array(object_points)
+    image_points = np.array(image_points)
+    if len(object_points) == 0 or len(image_points) == 0:
+        return None
+
+    # call solvePnP
+    ret, rotation_vec, translation_vec = cv2.solvePnP(object_points, image_points, camera_mat, distortion)
+    if not ret:
+        print(f"Cannot solve the PnP problem on the object")
+        return
+    rotation_mat, jacobian = cv2.Rodrigues(rotation_vec)
+    return Transform3D(*rotation_mat.flatten("F"), *translation_vec.flatten())
+
+def bgr_to_rgb(bgr: tuple) -> tuple:
+    return (bgr[2], bgr[1], bgr[0])
 
 APRILTAG_EDGE_COLORS = list(map(bgr_to_rgb, [
     (231, 17, 19),
@@ -182,9 +207,14 @@ def main():
     cam.set(cv2.CAP_PROP_FRAME_WIDTH, camera_data.resolution.x)
     cam.set(cv2.CAP_PROP_FRAME_HEIGHT, camera_data.resolution.y)
     x_scaling, y_scaling = get_camera_scaling(camera_data)
-    
-    denoiser_states: dict[int, DenoiserState] = dict()
-    # denoisers = None
+
+    screen_obj = TaggedObject(name="handhold screen", tags=dict([
+        (0, (28, Transform3D.translating(Vec3(-42.4, -21.5, 0.0)))),
+        (1, (28, Transform3D.translating(Vec3(42.4, -21.5, 0.0)))),
+        (2, (28, Transform3D.translating(Vec3(-42.4, 21.5, 0.0)))),
+        (3, (28, Transform3D.translating(Vec3(42.4, 21.5, 0.0)))),
+    ]))
+    object_to_detect = [screen_obj]
 
     def update(*_):
         nonlocal plt
@@ -196,28 +226,20 @@ def main():
             plt.close()
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         tags: list[apriltags.Detection] = detector.detect(gray)
-        # `all_tags` records all the tags that need to be processed in this frame,
-        # including the detected tags and tags whose disconnected frame count is
-        # less than the threshold
-        all_tags: dict[int, apriltags.Detection | None] = dict()
-        for tag in tags:
-            all_tags[tag.tag_id] = tag
-        for id, state in denoiser_states.items():
-            if state.disconnect_cnt <= MAX_DISCONNECTED_CNT and (id not in all_tags):
-                all_tags[id] = None
-            state.disconnect_cnt += 1
-        for id, tag in all_tags.items():
-            if tag != None:
-                for i, corner in enumerate(tag.corners):
-                    cv2.circle(frame, tuple(corner.astype(int)), 4, (227, 68, 69), 2)
-                    cv2.line(frame, tuple(corner.astype(int)), tuple(tag.corners[(i+1) % 4].astype(int)), color=APRILTAG_EDGE_COLORS[i])
-                cv2.putText(frame, f"tag:{tag.tag_id}", tuple(tag.center.astype(int)), fontFace=cv2.FONT_HERSHEY_PLAIN, fontScale=1.0, color=APRILTAG_EDGE_COLORS[0])
-                # print(tag)
-                transform = locate(id, tag, camera_data, 1.0, denoisers=denoiser_states, plt=plt)
-                plt += vedo.Point(transform(Vec3(0, 0, 1)), c="pink")
-            else:
-                transform = locate(id, None, camera_data, 1.0, denoisers=denoiser_states, plt=plt)
-                plt += vedo.Point(transform(Vec3(0, 0, 1)), c="pink")
+        for obj in object_to_detect:
+            obj_transform = locate_by_PnP(tags, obj, camera_data, plt)
+            if obj_transform != None:
+                plt += vedo.Point(obj_transform(Vec3(0., 0., 0.)), c="blue")
+                for id, (scale, tag_transform) in obj.tags.items():
+                    points = [
+                        Vec3(-.5, .5, 0.), Vec3(.5, .5, 0.),
+                        Vec3(.5, -.5, 0.), Vec3(-.5, -.5, 0.),
+                        Vec3(-.5, .5, 0.)
+                    ]
+                    points = [obj_transform(tag_transform(point * scale)) for point in points]
+                    plt += vedo.Line(points, c="red")
+                    for point in points[:4]:
+                        plt += vedo.Line([-point / point.z, point], c="black")
         
         # visualize
         plt += vedo.Axes(

@@ -20,8 +20,9 @@ class CameraData:
 
 config: list[CameraData] = [
     # camera 1
-    CameraData(id=1, resolution=Vec2(1920, 1080), fov_y=radians(53), position=Vec3(0.0), orientation=Vec3(0.0)),
-    CameraData(id=2, resolution=Vec2(1920, 1080), fov_y=radians(53), position=Vec3(0.0), orientation=Vec3(0.0)),
+    # CameraData(id=1, resolution=Vec2(1920, 1080), fov_y=radians(53), position=Vec3(0.0), orientation=Vec3(0.0)),
+    # CameraData(id=2, resolution=Vec2(1920, 1080), fov_y=radians(53), position=Vec3(0.0), orientation=Vec3(0.0)),
+    CameraData(id=0, resolution=Vec2(1280, 720), fov_y=radians(53), position=Vec3(0.0), orientation=Vec3(0.0)),
 ]
 
 def calibrate_camera(chessboard_dim: Vec2i) -> list[Transform3D]:
@@ -36,10 +37,12 @@ def calibrate_camera(chessboard_dim: Vec2i) -> list[Transform3D]:
     chessboard_dim_tuple = (chessboard_dim.x, chessboard_dim.y)
     exit_signal = False
     captures = [cv2.VideoCapture(cam_data.id) for cam_data in config]
-    for capture in captures:
+    for i, capture in enumerate(captures):
         if not capture.isOpened():
             print(f"相机{id}无法打开")
             return
+        capture.set(cv2.CAP_PROP_FRAME_WIDTH, config[i].resolution.x)
+        capture.set(cv2.CAP_PROP_FRAME_HEIGHT, config[i].resolution.y)
     def video_stream_main(index: int):
         id = config[index].id
         while not exit_signal:
@@ -126,21 +129,12 @@ def calibrate_camera(chessboard_dim: Vec2i) -> list[Transform3D]:
         print("畸变参数：")
         print(dist)
         camera_params.append((mtx, dist, rvecs, tvecs))
+        for j in range(len(captured_imgs)):
+            undistorted_img = cv2.undistort(captured_imgs[j][i, :, :], mtx, dist)
+            cv2.imshow(f"window-{j}", undistorted_img)
+            cv2.waitKey()
         # TODO: 我也不知道要怎么算了啊啊啊啊啊啊啊啊啊啊啊啊啊啊啊啊啊啊
         # 救救孩子
-
-    if len(config) >= 2:
-        # 标定下标为0和1的相机
-        h, w = captured_imgs[n]
-        ret, mtx1, dst1, mtx2, dst2, R1, T1, R2, T2 = cv2.stereoCalibrate(
-            [objpoints[n][0, :, :] for n in range(len(objpoints))],
-            [imgpoints[n][0, :, :] for n in range(len(imgpoints))],
-            [imgpoints[n][1, :, :] for n in range(len(imgpoints))],
-            camera_params[0][0],
-            camera_params[0][1],
-            camera_params[1][0],
-            camera_params[1][1],
-        )
 
 
 def main():

@@ -202,7 +202,7 @@ class MediaPipeEye3DPositioner:
                 zshift_along_y=0.5
             )
 
-            image_half_size = Vec2(sin(self.fov_y / 2) * ar, sin(self.fov_y / 2))
+            image_half_size = Vec2(tan(self.fov_y / 2) * ar, tan(self.fov_y / 2))
 
             # image
             self._visualization_image = cv2.cvtColor(result._frame_view, cv2.COLOR_BGR2RGB,
@@ -237,7 +237,7 @@ class MediaPipeEye3DPositioner:
             plt += Points(right_eye_3d_samples, c="gray")
 
             # Landmarks
-            plt += Points([((_landmark_to_vec3(landmark) - Vec3(0.0, 1.0, 0.0)) * Vec3(2.0, -2.0, -2.0) * Vec3(image_half_size, 1.0) - Vec3(image_half_size, 0.5)) for landmark in result._face_landmarks], c="pink")
+            # plt += Points([((_landmark_to_vec3(landmark) - Vec3(0.0, 1.0, 0.0)) * Vec3(2.0, -2.0, -2.0) * Vec3(image_half_size, 1.0) - Vec3(image_half_size, 0.5)) for landmark in result._face_landmarks], c="pink")
 
             # camera frustum
             plt += Lines(
