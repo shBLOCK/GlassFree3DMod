@@ -6,6 +6,8 @@ from spatium import *
 import vedo
 from math import radians
 from scipy import linalg
+from queue import Queue
+import socket
 
 def homogeneous_vec(vec: np.ndarray):
     # vec: (3, N)
@@ -45,7 +47,7 @@ def get_camera_matrix(camera: Camera) -> np.ndarray:
         [0.0, camera.resolution.y/2, camera.resolution.y/2],
         [0.0, 0.0, 1.0],
     ])
-    world_to_uv = np.array([[1/x_scaling, 0.0, 0.0], [0.0, -1/y_scaling, 0.0], [0.0, 0.0, 1.0]])
+    world_to_uv = np.array([[1/x_scaling, 0.0, 0.0], [0.0, 1/y_scaling, 0.0], [0.0, 0.0, 1.0]])
     return uv_to_image @ world_to_uv
 
 def get_inv_camera_matrix(camera: Camera) -> np.ndarray:
@@ -56,7 +58,7 @@ def get_inv_camera_matrix(camera: Camera) -> np.ndarray:
         [0.0, 2/camera.resolution.y, -1.0],
         [0.0, 0.0, 1.0],
     ])
-    uv_to_world = np.array([[x_scaling, 0.0, 0.0], [0.0, -y_scaling, 0.0], [0.0, 0.0, 1.0]])
+    uv_to_world = np.array([[x_scaling, 0.0, 0.0], [0.0, y_scaling, 0.0], [0.0, 0.0, 1.0]])
     return uv_to_world @ image_to_uv
 
 @dataclass
@@ -175,6 +177,7 @@ def locate_by_PnP(tags: list[apriltags.Detection], object: TaggedObject, camera:
                 object_points.append(tag_in_obj(APRILTAG_CORNER_ORDER[i] * scale))
                 image_points.append(tag.corners[i])
     object_points = np.array(object_points)
+    # print(object_points)
     image_points = np.array(image_points)
     if len(object_points) == 0 or len(image_points) == 0:
         return None
@@ -199,6 +202,11 @@ APRILTAG_EDGE_COLORS = list(map(bgr_to_rgb, [
 
 MAX_DISCONNECTED_CNT = 6
 
+def server_thread(queue: Queue):
+    # with 
+    # TODO
+    pass
+
 def main():
     plt = vedo.Plotter(size=(1280, 800), interactive=True)
     detector = apriltags.Detector(families="tag36h11", nthreads=1, quad_decimate=2.0, quad_sigma=0.0, refine_edges=1, decode_sharpening=0.6, debug=0)
@@ -208,13 +216,20 @@ def main():
     cam.set(cv2.CAP_PROP_FRAME_HEIGHT, camera_data.resolution.y)
     x_scaling, y_scaling = get_camera_scaling(camera_data)
 
-    screen_obj = TaggedObject(name="handhold screen", tags=dict([
-        (0, (28, Transform3D.translating(Vec3(-42.4, -21.5, 0.0)))),
-        (1, (28, Transform3D.translating(Vec3(42.4, -21.5, 0.0)))),
-        (2, (28, Transform3D.translating(Vec3(-42.4, 21.5, 0.0)))),
-        (3, (28, Transform3D.translating(Vec3(42.4, 21.5, 0.0)))),
-    ]))
-    object_to_detect = [screen_obj]
+    screen_obj = TaggedObject(name="handhold screen", tags={
+        0: (28, Transform3D.translating(Vec3(-42.4, -21.5, 0.0))),
+        1: (28, Transform3D.translating(Vec3(42.4, -21.5, 0.0))),
+        2: (28, Transform3D.translating(Vec3(-42.4, 21.5, 0.0))),
+        3: (28, Transform3D.translating(Vec3(42.4, 21.5, 0.0))),
+    })
+    wand_obj = TaggedObject(name="wand", tags={
+        120: (40, Transform3D.translating(Vec3(0., 0., -31.))),
+        121: (40, Transform3D.rotating(Vec3(1., 0., 0.), np.pi/2).rotate_ip(Vec3(0., 0., 1.), -np.pi/2).translate_ip(Vec3(31., 0., 0.))),
+        122: (40, Transform3D.rotating(Vec3(1., 0., 0.), np.pi/2).rotate_ip(Vec3(0., 0., 1.), np.pi).translate_ip(Vec3(0., -31.0, 0.))),
+        123: (40, Transform3D.rotating(Vec3(1., 0., 0.), np.pi/2).rotate_ip(Vec3(0., 0., 1.), np.pi/2).translate_ip(Vec3(-31., 0., 0.))),
+        124: (40, Transform3D.rotating(Vec3(1., 0., 0.), np.pi/2).translate_ip(Vec3(0., 31., 0.)))
+    })
+    object_to_detect = [screen_obj, wand_obj]
 
     def update(*_):
         nonlocal plt
@@ -229,7 +244,10 @@ def main():
         for obj in object_to_detect:
             obj_transform = locate_by_PnP(tags, obj, camera_data, plt)
             if obj_transform != None:
-                plt += vedo.Point(obj_transform(Vec3(0., 0., 0.)), c="blue")
+                plt += vedo.Point(obj_transform(Vec3(0., 0., 0.)), c="black")
+                plt += vedo.Line(obj_transform(Vec3(0., 0., 0.)), obj_transform(Vec3(20., 0., 0.)), c="red")
+                plt += vedo.Line(obj_transform(Vec3(0., 0., 0.)), obj_transform(Vec3(0., 20., 0.)), c="green")
+                plt += vedo.Line(obj_transform(Vec3(0., 0., 0.)), obj_transform(Vec3(0., 0., 20.)), c="blue")
                 for id, (scale, tag_transform) in obj.tags.items():
                     points = [
                         Vec3(-.5, .5, 0.), Vec3(.5, .5, 0.),
@@ -254,7 +272,7 @@ def main():
             zshift_along_x=0.5,
             zshift_along_y=0.5
         )
-        img = vedo.Image(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+        img = vedo.Image(cv2.cvtColor(cv2.flip(frame, 1), cv2.COLOR_BGR2RGB))
         img.scale(y_scaling * 2 / frame.shape[0])
         img.pos(-x_scaling, -y_scaling, -1)
         plt += img
