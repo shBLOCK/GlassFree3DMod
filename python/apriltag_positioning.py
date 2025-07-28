@@ -162,7 +162,7 @@ def locate(id: int, tag: apriltags.Detection, camera: Camera, scale: float, plt:
     #         plt += vedo.Line([np.zeros(3), new_dir_z], c="gray")
     return Transform3D(*dir_x, *dir_y, *dir_z, *center)
 
-def locate_by_PnP(tags: list[apriltags.Detection], object: TaggedObject, camera: Camera, plt: vedo.Plotter | None = None) -> Transform3D | None:
+def locate_by_PnP(tags: dict[int, apriltags.Detection], object: TaggedObject, camera: Camera, plt: vedo.Plotter | None = None) -> Transform3D | None:
     APRILTAG_CORNER_ORDER = [
         Vec3(-0.5, 0.5, 0.0),
         Vec3(0.5, 0.5, 0.0),
@@ -173,9 +173,10 @@ def locate_by_PnP(tags: list[apriltags.Detection], object: TaggedObject, camera:
     distortion = np.zeros(5)
     object_points = []
     image_points = []
-    for tag in tags:
-        if tag.tag_id in object.tags:
-            scale, tag_in_obj = object.tags[tag.tag_id]
+    for tag_id in object.tags.keys():
+        if tag_id in tags:
+            tag = tags[tag_id]
+            scale, tag_in_obj = object.tags[tag_id]
             # The object requires the tag to locate
             for i in range(4):
                 object_points.append(tag_in_obj(APRILTAG_CORNER_ORDER[i] * scale))
@@ -253,7 +254,7 @@ def main():
         123: (40, Transform3D.rotating(Vec3(1., 0., 0.), np.pi/2).rotate_ip(Vec3(0., 0., 1.), np.pi/2).translate_ip(Vec3(-31., 0., 0.))),
         124: (40, Transform3D.rotating(Vec3(1., 0., 0.), np.pi/2).translate_ip(Vec3(0., 31., 0.)))
     })
-    object_to_detect = [screen_obj, wand_obj]
+    object_to_detect = [screen_obj, wand_obj, get_simple_tag_object('ababa', 128, 4.0)]
 
     packet_queue: Queue[str] = Queue()
     server_thread = Thread(target=server_thread_main, args=(packet_queue,), name="Server thread", daemon=True)
@@ -270,8 +271,9 @@ def main():
             plt.close()
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         tags: list[apriltags.Detection] = detector.detect(gray)
+        tags_dict: dict[int, apriltags.Detection] = dict([(tag.tag_id, tag) for tag in tags])
         for obj in object_to_detect:
-            obj_transform = locate_by_PnP(tags, obj, camera_data, plt)
+            obj_transform = locate_by_PnP(tags_dict, obj, camera_data, plt)
             if obj_transform != None:
                 plt += vedo.Point(obj_transform(Vec3(0., 0., 0.)), c="black")
                 plt += vedo.Line(obj_transform(Vec3(0., 0., 0.)), obj_transform(Vec3(20., 0., 0.)), c="red")
