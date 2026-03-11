@@ -1,24 +1,14 @@
 package dev.shblock.glassfree3d.cube_demo
 
 import com.mojang.blaze3d.pipeline.MainTarget
-import com.mojang.blaze3d.platform.GlConst
-import com.mojang.blaze3d.platform.GlStateManager
 import com.mojang.blaze3d.systems.RenderSystem
 import com.mojang.blaze3d.vertex.BufferUploader
 import com.mojang.blaze3d.vertex.DefaultVertexFormat
-import com.mojang.blaze3d.vertex.Tesselator
 import com.mojang.blaze3d.vertex.VertexFormat
 import com.mojang.blaze3d.vertex.VertexSorting
 import dev.shblock.glassfree3d.rendering.ModWindow
 import dev.shblock.glassfree3d.rendering.Screen3D
-import dev.shblock.glassfree3d.utils.HALF_PI
-import dev.shblock.glassfree3d.utils.MC
-import dev.shblock.glassfree3d.utils.MiscUtils
-import dev.shblock.glassfree3d.utils.asVector3d
-import dev.shblock.glassfree3d.utils.plus
-import dev.shblock.glassfree3d.utils.resizeLazy
-import dev.shblock.glassfree3d.utils.toVector3d
-import dev.shblock.glassfree3d.utils.toVector3f
+import dev.shblock.glassfree3d.utils.*
 import net.minecraft.client.renderer.GameRenderer
 import net.minecraft.client.renderer.Rect2i
 import net.minecraft.util.GsonHelper
@@ -32,6 +22,8 @@ import org.joml.Vector2i
 import org.joml.Vector3d
 import org.joml.Vector3f
 import java.io.IOException
+import java.lang.Math
+import java.lang.Thread
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.util.concurrent.atomic.AtomicReference
@@ -64,7 +56,7 @@ class Visualizer(private val window: ModWindow) {
             RenderSystem.setProjectionMatrix(
                 Matrix4f().setPerspective(
                     Math.toRadians(70.0).toFloat(),
-                    (window.framebufferSize.x / window.framebufferSize.y).toFloat(),
+                    window.framebufferSize.x.toFloat() / window.framebufferSize.y,
                     0.01f,
                     1e3f,
                 ),
@@ -124,6 +116,7 @@ object CubeDemo1 {
 //                        .translate(realCameraPos.toVector3f())
                         .lookAt(
                             realCameraPos.toVector3f(),
+//                            realCameraPos.toVector3f().normalize(12.0f),
                             cubeRealPose.pos.toVector3f(),
                             Vector3f(0f, 1f, 0f)
                         )
@@ -188,16 +181,16 @@ object CubeDemo1 {
         if (!initialized) init()
 
         cubeScreens.forEach {
-            it.clipAtScreenPlane = false
             it.zNear = 0.05
+            it.clipAtScreenPlane = true
         }
-        cubeVirtualPose.scale = 8.0
+        cubeVirtualPose.scale = 5.0
 
         realCameraPos.set(
             Vector3d(eyePos.get())
                 .mul(Vector3d(1.0, 1.0, -1.0))
                 .rotate(Quaterniond())
-                .add(Vector3d(0.0, 0.0, -10.0))
+                .add(Vector3d(0.0, 0.0, -15.0))
         )
         println(realCameraPos)
 
