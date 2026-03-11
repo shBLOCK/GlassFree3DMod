@@ -1,5 +1,7 @@
 package dev.shblock.glassfree3d
 
+import dev.shblock.glassfree3d.cube_demo.CubeDemo1
+import dev.shblock.glassfree3d.demo1.Demo1
 import dev.shblock.glassfree3d.utils.MC
 import net.neoforged.bus.api.SubscribeEvent
 import net.neoforged.fml.common.EventBusSubscriber
@@ -18,7 +20,8 @@ object GlassFree3DMod {
     @SubscribeEvent
     fun onClientTick(event: ClientTickEvent.Pre) {
         if (MC.level != null) {
-            Demo1.tick()
+//            Demo1.tick()
+            CubeDemo1.tick()
         }
     }
 }

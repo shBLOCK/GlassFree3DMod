@@ -4,6 +4,8 @@ import com.mojang.blaze3d.pipeline.MainTarget
 import com.mojang.blaze3d.platform.GlStateManager
 import com.mojang.blaze3d.systems.RenderSystem
 import com.mojang.blaze3d.vertex.*
+import dev.shblock.glassfree3d.ducks.LevelRendererAccessor
+import dev.shblock.glassfree3d.mixin.LevelRendererMixin
 import dev.shblock.glassfree3d.utils.*
 import net.minecraft.client.Camera
 import net.minecraft.client.Minecraft
@@ -29,21 +31,41 @@ import java.util.*
 
 class Screen3D(
     val window: ModWindow,
-    var viewport: Rect2i
-) {
-    private val framebuffer = MainTarget(viewport.width, viewport.height)
+    var viewport: Rect2i,
 
-    var virtualPos = Vector3d()
-    var virtualSize = Vector2d(1.0)
-    var virtualOrientation = Quaterniond()
-    var realPos = Vector3d()
-    var realSize = Vector2d(1.0)
-    var realOrientation = Quaterniond()
-    var realCameraPos = Vector3d(0.0, 0.0, 1.0)
+    var realPose: Pose = Pose(),
+    var realSize: Vector2d = Vector2d(1.0),
+    var virtualPose: Pose = Pose(),
+    var virtualSize: Vector2d = Vector2d(1.0),
+
+    var realCameraPos: Vector3d = Vector3d(0.0, 0.0, 1.0),
+
+    var zNear: Double = 0.05,
+    var clipAtScreenPlane: Boolean = true,
+) {
+    data class Pose(
+        var pos: Vector3d = Vector3d(),
+        var orientation: Quaterniond = Quaterniond(),
+        var scale: Double = 1.0,
+        var parent: Pose? = null
+    ) {
+        fun transform(vec: Vector3d): Vector3d =
+            orientation.transform(vec, Vector3d()).mul(scale).add(pos)
+
+        fun global(): Pose {
+            val gParent = parent?.global() ?: return this.copy()
+            return Pose(
+                pos = gParent.transform(pos),
+                orientation = gParent.orientation.mul(orientation, Quaterniond()),
+                scale = gParent.scale * scale
+            )
+        }
+    }
+
+    val framebuffer = MainTarget(viewport.width, viewport.height)
+
     var virtualCameraPos = Vector3d(0.0, 0.0, 1.0)
         private set
-    var zNear = 0.05
-    var clipAtScreenPlane = true
 
     private val virtualCamera = Camera()
     private var frustumMatrix = Matrix4d()
@@ -53,21 +75,27 @@ class Screen3D(
         Manager.newScreen(this)
     }
 
-    private fun updateProjectionAndCamera() {
-        val localRealCameraPos = realOrientation.transformInverse(realCameraPos - realPos)
-        val scale = virtualSize.div(realSize, Vector2d())
+    private fun updateProjectionAndCamera(): Boolean {
+        val gRealPose = realPose.global()
+        val gVirtualPose = virtualPose.global()
+        val gRealSize = realSize.mul(gRealPose.scale, Vector2d())
+        val gVirtualSize = virtualSize.mul(gVirtualPose.scale, Vector2d())
+
+        val localRealCameraPos = gRealPose.orientation.transformInverse(realCameraPos - gRealPose.pos)
+        val scale = gVirtualSize.div(gRealSize, Vector2d())
         val scale3d = Vector3d(scale, (scale.x + scale.y) / 2.0)
         val localVirtualCameraPos = localRealCameraPos.mul(scale3d, Vector3d())
-        virtualCameraPos = virtualOrientation.transform(localVirtualCameraPos, Vector3d()) + virtualPos
+        if (localVirtualCameraPos.z <= 0.0) return false // camera is behind screen
+        virtualCameraPos = gVirtualPose.orientation.transform(localVirtualCameraPos, Vector3d()) + gVirtualPose.pos
 
         if (clipAtScreenPlane) {
             zNear = localVirtualCameraPos.z
         }
         virtualCamera.initialized = true
         virtualCamera.position = virtualCameraPos.toVec3()
-        virtualCamera.rotation.set(virtualOrientation)
-        frustumMatrix.rotation(Quaternionf(virtualOrientation.conjugate(Quaterniond())))
-        val halfVirtualSize = virtualSize.div(2.0, Vector2d())
+        virtualCamera.rotation.set(gVirtualPose.orientation)
+        frustumMatrix.rotation(Quaternionf(gVirtualPose.orientation.conjugate(Quaterniond())))
+        val halfVirtualSize = gVirtualSize.div(2.0, Vector2d())
         val left = (-localVirtualCameraPos.x - halfVirtualSize.x) / localVirtualCameraPos.z * zNear
         val right = (-localVirtualCameraPos.x + halfVirtualSize.x) / localVirtualCameraPos.z * zNear
         val bottom = (-localVirtualCameraPos.y - halfVirtualSize.y) / localVirtualCameraPos.z * zNear
@@ -76,10 +104,13 @@ class Screen3D(
             left, right, bottom, top,
             zNear, MC.gameRenderer.depthFar.toDouble()
         )
+        return true
     }
 
     private fun render() {
         RenderSystem.assertOnRenderThread()
+
+        if (!updateProjectionAndCamera()) return
 
         MiscUtils.withMainRenderTarget(framebuffer) {
             if (framebuffer.width != viewport.width || framebuffer.height != viewport.height) {
@@ -92,7 +123,6 @@ class Screen3D(
             virtualCamera.level = levelRenderer.level!!
             virtualCamera.entity = MC.player!!
 
-            updateProjectionAndCamera()
             val frustumMatrixF = Matrix4f(frustumMatrix)
             val projectionMatrixF = Matrix4f(projectionMatrix)
 
@@ -154,6 +184,7 @@ class Screen3D(
         private val screens = mutableListOf<Screen3D>()
         private val windows = mutableSetOf<ModWindow>()
         private val levelRenderers = mutableMapOf<ResourceKey<Level>, LevelRenderer>()
+        val afterRenderAll = mutableListOf<() -> Unit>()
 
         internal fun newScreen(screen: Screen3D) {
             screens += screen
@@ -167,11 +198,16 @@ class Screen3D(
                     MC.entityRenderDispatcher,
                     MC.blockEntityRenderDispatcher,
                     RenderBuffers(Runtime.getRuntime().availableProcessors())
-                ).apply { setLevel(MC.level) } // TODO: actually handle non-current levels
+                ).apply {
+                    (this as LevelRendererAccessor).gf_setDisableFrustumCulling(true)
+
+                    setLevel(MC.level) // TODO: actually handle non-current levels
+                }
             }
         }
 
         internal fun renderAll() {
+//            levelRenderers.forEach { level, renderer -> renderer.visibleSections.clear() }
             screens.forEach { it.render() }
 
             RenderSystem.replayQueue()
@@ -182,6 +218,9 @@ class Screen3D(
                 windowScreens.forEach { it.blit() }
                 window.endFrame()
             }
+
+            afterRenderAll.forEach { it() }
+
             glfwMakeContextCurrent(MC.window.window)
         }
 

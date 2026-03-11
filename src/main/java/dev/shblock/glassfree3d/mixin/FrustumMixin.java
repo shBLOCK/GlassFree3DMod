@@ -8,14 +8,14 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(Frustum.class)
 public class FrustumMixin {
-    @Inject(
-        method = "offsetToFullyIncludeCameraCube",
-        at = @At("HEAD"),
-        cancellable = true
-    )
-    void fixOffsetToFullyIncludeCameraCubeForOffAxis(int offset, CallbackInfoReturnable<Frustum> cir) {
-        cir.setReturnValue((Frustum) (Object) this);
-        cir.cancel();
-    }
+//    @Inject(
+//        method = "offsetToFullyIncludeCameraCube",
+//        at = @At("HEAD"),
+//        cancellable = true
+//    )
+//    void fixOffsetToFullyIncludeCameraCubeForOffAxis(int offset, CallbackInfoReturnable<Frustum> cir) {
+//        cir.setReturnValue((Frustum) (Object) this);
+//        cir.cancel();
+//    }
 }
 

@@ -1,5 +1,6 @@
 package dev.shblock.glassfree3d.utils
 
+import com.google.gson.JsonObject
 import com.mojang.blaze3d.pipeline.RenderTarget
 import dev.shblock.glassfree3d.ducks.MinecraftAccessor
 import net.minecraft.client.Minecraft
@@ -34,3 +35,9 @@ fun Vector3dc.toVec3() = Vec3(x(), y(), z())
 operator fun Vector3dc.plus(other: Vector3dc): Vector3d = add(other, Vector3d())
 operator fun Vector3dc.minus(other: Vector3dc): Vector3d = sub(other, Vector3d())
 operator fun Vector3dc.times(other: Vector3dc): Vector3d = mul(other, Vector3d())
+
+inline val Double.Companion.HALF_PI get() = Math.PI / 2.0
+inline val Double.Companion.PI get() = Math.PI
+inline val Double.Companion.TAU get() = Math.TAU
+
+val JsonObject.asVector3d get() = Vector3d(get("x").asDouble, get("y").asDouble, get("z").asDouble)

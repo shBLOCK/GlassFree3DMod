@@ -9,6 +9,7 @@
         "ClientLevelMixin",
         "FrustumMixin",
         "GameRendererMixin",
+        "LevelRendererMixin",
         "MinecraftMixin"
     ],
     "injectors": {

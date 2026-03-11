@@ -1,10 +1,10 @@
-package dev.shblock.glassfree3d
+package dev.shblock.glassfree3d.demo1
 
-import com.fazecast.jSerialComm.SerialPort
 import com.google.gson.JsonObject
 import dev.shblock.glassfree3d.rendering.ModWindow
 import dev.shblock.glassfree3d.rendering.Screen3D
 import dev.shblock.glassfree3d.utils.MC
+import dev.shblock.glassfree3d.utils.asVector3d
 import dev.shblock.glassfree3d.utils.plus
 import dev.shblock.glassfree3d.utils.toVector3d
 import net.minecraft.client.renderer.Rect2i
@@ -13,14 +13,12 @@ import org.joml.Quaterniond
 import org.joml.Vector2d
 import org.joml.Vector2i
 import org.joml.Vector3d
-import java.io.BufferedReader
 import java.io.IOException
-import java.io.InputStreamReader
-import java.net.Socket
+import java.net.DatagramPacket
+import java.net.DatagramSocket
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 
-private val JsonObject.asVector3d get() = Vector3d(get("x").asDouble, get("y").asDouble, get("z").asDouble)
 private fun ByteArray.getFixedPoint16(offset: Int) =
     ((get(offset).toInt() or (get(offset + 1).toInt() shl 8)) - 32768).toDouble() / 32768.0
 //    (get(offset).toInt() or (get(offset + 1).toInt() shl 8)).toDouble() / 65536.0
@@ -37,23 +35,37 @@ object Demo1 {
     fun init() {
         initialized = true
 
-        window = ModWindow(Vector2i(1920, 1200), title = "Demo1")
-        screen = Screen3D(window, Rect2i(0, 0, 1920, 1200))
+        window = ModWindow(Vector2i(2560, 1600), title = "Demo1")
+        screen = Screen3D(window, Rect2i(0, 0, 2560, 1600))
 
         thread(name = "Demo1SocketClient", isDaemon = true) {
             while (true) {
                 try {
-                    println("Connecting...")
-                    Socket("127.0.0.1", 30001).use { socket ->
-                        println("Connected to ${socket.remoteSocketAddress}")
-                        val reader = BufferedReader(InputStreamReader(socket.inputStream))
-                        while (true) {
-                            val pkt = GsonHelper.parse(reader.readLine())
-                            val leftEye = pkt.get("left_eye_3d").asJsonObject.asVector3d
-                            val rightEye = pkt.get("right_eye_3d").asJsonObject.asVector3d
-                            eyePos.set((leftEye + rightEye) / 2.0)
-                        }
+                    val socket = DatagramSocket(30001)
+                    val buffer = ByteArray(1024)
+
+                    while (true) {
+                        val pkt = DatagramPacket(buffer, buffer.size)
+                        socket.receive(pkt)
+                        val string = String(pkt.data, 0, pkt.length)
+                        val data = GsonHelper.parse(string)
+                        val leftEye = data.get("left_eye_3d").asJsonObject.asVector3d
+                        val rightEye = data.get("right_eye_3d").asJsonObject.asVector3d
+                        eyePos.set((leftEye + rightEye) / 2.0)
+//                        eyePos.set(rightEye)
                     }
+
+//                    println("Connecting...")
+//                    Socket("127.0.0.1", 30001).use { socket ->
+//                        println("Connected to ${socket.remoteSocketAddress}")
+//                        val reader = BufferedReader(InputStreamReader(socket.inputStream))
+//                        while (true) {
+//                            val pkt = GsonHelper.parse(reader.readLine())
+//                            val leftEye = pkt.get("left_eye_3d").asJsonObject.asVector3d
+//                            val rightEye = pkt.get("right_eye_3d").asJsonObject.asVector3d
+//                            eyePos.set((leftEye + rightEye) / 2.0)
+//                        }
+//                    }
                 } catch (e: IOException) {
                     println("Failed to receive packet: $e")
                     Thread.sleep(1000)
@@ -118,18 +130,19 @@ object Demo1 {
         val windowPos = window.posInMonitor(DISPLAY_MONITOR)
         val screenA = (Vector2d(windowPos) / res).sub(0.5, 0.5)
         val screenB = (Vector2d(windowPos.add(window.size, Vector2i())) / res).sub(0.5, 0.5)
-        screen.realPos = Vector3d(
+        screen.realPose.pos = Vector3d(
             screenA.add(screenB, Vector2d()).div(2.0).mul(1.0, -1.0).mul(DISPLAY_SIZE),
             0.0
         ).add(DISPLAY_POS)
         screen.realSize = screenB.sub(screenA, Vector2d()).mul(DISPLAY_SIZE)
         screen.realCameraPos = Vector3d(eyePos.get())
-            .mul(Vector3d(-1.0, 1.0, -1.0))
+            .mul(Vector3d(1.0, 1.0, -2.0))
             .rotate(CAMERA_ORIENTATION)
             .add(CAMERA_POS)
+        println(screen.realCameraPos)
 
-        screen.virtualPos = MC.gameRenderer.mainCamera.position.toVector3d()
-        screen.virtualOrientation = Quaterniond(MC.gameRenderer.mainCamera.rotation())
-        screen.virtualSize = screen.realSize.mul(8.0 / DISPLAY_SIZE.y, Vector2d())
+        screen.virtualPose.pos = MC.gameRenderer.mainCamera.position.toVector3d()
+        screen.virtualPose.orientation = Quaterniond(MC.gameRenderer.mainCamera.rotation())
+        screen.virtualSize = screen.realSize.mul(50.0 / DISPLAY_SIZE.y, Vector2d())
     }
 }
