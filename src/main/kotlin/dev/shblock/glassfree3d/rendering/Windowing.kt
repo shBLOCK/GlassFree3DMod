@@ -1,12 +1,17 @@
 package dev.shblock.glassfree3d.rendering
 
+import com.mojang.blaze3d.pipeline.RenderTarget
 import com.mojang.blaze3d.systems.RenderSystem
 import com.mojang.blaze3d.vertex.Tesselator
 import dev.shblock.glassfree3d.utils.MC
 import dev.shblock.glassfree3d.utils.MiscUtils
+import dev.shblock.glassfree3d.utils.x1
+import dev.shblock.glassfree3d.utils.y1
+import net.minecraft.client.renderer.Rect2i
 import org.joml.Vector2i
 import org.lwjgl.glfw.GLFW.*
 import org.lwjgl.opengl.GL
+import org.lwjgl.opengl.GL30.*
 import org.lwjgl.system.MemoryUtil.NULL
 
 class ModWindow(
@@ -79,6 +84,23 @@ class ModWindow(
 
     fun makeCurrent() {
         glfwMakeContextCurrent(window)
+    }
+
+    fun blitFramebuffer(framebuffer: RenderTarget, viewport: Rect2i? = null, flip: Boolean = true) {
+        val ctx = glfwGetCurrentContext()
+        if (ctx != window) glfwMakeContextCurrent(window)
+
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, framebuffer.frameBufferId)
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0)
+        val vp = viewport ?: Rect2i(0, 0, framebuffer.width, framebuffer.height)
+        glBlitFramebuffer(
+            0, 0, framebuffer.width, framebuffer.height,
+            vp.x, vp.y, vp.x1, vp.y1,
+            GL_COLOR_BUFFER_BIT, GL_NEAREST
+        )
+
+        if (flip) glfwSwapBuffers(window)
+        if (ctx != window) glfwMakeContextCurrent(ctx)
     }
 
     fun endFrame() {

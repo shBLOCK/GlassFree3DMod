@@ -5,7 +5,6 @@ import com.mojang.blaze3d.platform.GlStateManager
 import com.mojang.blaze3d.systems.RenderSystem
 import com.mojang.blaze3d.vertex.*
 import dev.shblock.glassfree3d.ducks.LevelRendererAccessor
-import dev.shblock.glassfree3d.mixin.LevelRendererMixin
 import dev.shblock.glassfree3d.utils.*
 import net.minecraft.client.Camera
 import net.minecraft.client.Minecraft
@@ -26,6 +25,7 @@ import org.joml.Quaternionf
 import org.joml.Vector2d
 import org.joml.Vector3d
 import org.lwjgl.glfw.GLFW.glfwMakeContextCurrent
+import org.lwjgl.opengl.GL33.*
 import java.lang.Runtime
 import java.util.*
 
@@ -113,9 +113,7 @@ class Screen3D(
         if (!updateProjectionAndCamera()) return
 
         MiscUtils.withMainRenderTarget(framebuffer) {
-            if (framebuffer.width != viewport.width || framebuffer.height != viewport.height) {
-                framebuffer.resize(viewport.width, viewport.height, false)
-            }
+            framebuffer.resizeLazy(viewport.width, viewport.height)
 
             framebuffer.bindWrite(true)
 
@@ -147,36 +145,8 @@ class Screen3D(
         }
     }
 
-    // Vertex buffer is not shared between contexts, the vertex format contains a vertex buffer, so we create our own here.
-    private val SCREEN_BLIT_VF = VertexFormat.builder().add("Position", VertexFormatElement.POSITION).build()
-
     private fun blit() {
-        // MainTarget.blitToScreen()
-        RenderSystem.assertOnRenderThread()
-        framebuffer.unbindWrite()
-        GlStateManager._viewport(viewport.x, viewport.y, viewport.width, viewport.height)
-        GlStateManager._colorMask(true, true, true, false)
-        GlStateManager._disableDepthTest()
-        GlStateManager._depthMask(false)
-        GlStateManager._disableBlend()
-
-        val minecraft = Minecraft.getInstance()
-        val shaderinstance = Objects.requireNonNull<ShaderInstance?>(
-            minecraft.gameRenderer.blitShader,
-            "Blit shader not loaded"
-        ) as ShaderInstance
-        shaderinstance.setSampler("DiffuseSampler", framebuffer.colorTextureId)
-        shaderinstance.apply()
-        val bufferbuilder =
-            RenderSystem.renderThreadTesselator().begin(VertexFormat.Mode.QUADS, SCREEN_BLIT_VF)
-        bufferbuilder.addVertex(0.0f, 0.0f, 0.0f)
-        bufferbuilder.addVertex(1.0f, 0.0f, 0.0f)
-        bufferbuilder.addVertex(1.0f, 1.0f, 0.0f)
-        bufferbuilder.addVertex(0.0f, 1.0f, 0.0f)
-        BufferUploader.draw(bufferbuilder.buildOrThrow())
-        shaderinstance.clear()
-        GlStateManager._depthMask(true)
-        GlStateManager._colorMask(true, true, true, true)
+        window.blitFramebuffer(framebuffer, viewport, flip = false)
     }
 
     @Suppress("FunctionName")
@@ -219,9 +189,9 @@ class Screen3D(
                 window.endFrame()
             }
 
-            afterRenderAll.forEach { it() }
-
             glfwMakeContextCurrent(MC.window.window)
+
+            afterRenderAll.forEach { it() }
         }
 
         internal fun LR_onChunkLoaded(dim: ResourceKey<Level>, chunkPos: ChunkPos) {

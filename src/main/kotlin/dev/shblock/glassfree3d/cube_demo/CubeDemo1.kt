@@ -1,19 +1,36 @@
 package dev.shblock.glassfree3d.cube_demo
 
+import com.mojang.blaze3d.pipeline.MainTarget
+import com.mojang.blaze3d.platform.GlConst
+import com.mojang.blaze3d.platform.GlStateManager
+import com.mojang.blaze3d.systems.RenderSystem
+import com.mojang.blaze3d.vertex.BufferUploader
+import com.mojang.blaze3d.vertex.DefaultVertexFormat
 import com.mojang.blaze3d.vertex.Tesselator
+import com.mojang.blaze3d.vertex.VertexFormat
+import com.mojang.blaze3d.vertex.VertexSorting
 import dev.shblock.glassfree3d.rendering.ModWindow
 import dev.shblock.glassfree3d.rendering.Screen3D
 import dev.shblock.glassfree3d.utils.HALF_PI
 import dev.shblock.glassfree3d.utils.MC
+import dev.shblock.glassfree3d.utils.MiscUtils
 import dev.shblock.glassfree3d.utils.asVector3d
 import dev.shblock.glassfree3d.utils.plus
+import dev.shblock.glassfree3d.utils.resizeLazy
 import dev.shblock.glassfree3d.utils.toVector3d
+import dev.shblock.glassfree3d.utils.toVector3f
+import net.minecraft.client.renderer.GameRenderer
 import net.minecraft.client.renderer.Rect2i
 import net.minecraft.util.GsonHelper
+import net.neoforged.neoforge.client.GlStateBackup
+import org.joml.Matrix4f
+import org.joml.Matrix4fStack
 import org.joml.Quaterniond
 import org.joml.Vector2d
+import org.joml.Vector2f
 import org.joml.Vector2i
 import org.joml.Vector3d
+import org.joml.Vector3f
 import java.io.IOException
 import java.net.DatagramPacket
 import java.net.DatagramSocket
@@ -21,12 +38,67 @@ import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 
 class Visualizer(private val window: ModWindow) {
-    private val tesselator = Tesselator(4096)
+    //    private val tesselator = Tesselator(4096)
+    private val framebuffer = MainTarget(window.framebufferSize.x, window.framebufferSize.y)
 
-    fun draw() {
-        window.makeCurrent()
+    fun draw(screens: Collection<Screen3D>, cameraTransform: (Matrix4fStack) -> Unit) {
+        RenderSystem.assertOnRenderThread()
 
-        window.endFrame()
+        MiscUtils.withMainRenderTarget(framebuffer) {
+            framebuffer.resizeLazy(window.framebufferSize.x, window.framebufferSize.y)
+            framebuffer.setClearColor(0f, 0f, 0f, 1f);
+            framebuffer.clear(false);
+            framebuffer.bindWrite(true)
+
+            val QUAD = arrayOf(
+                Vector3d(-1.0, -1.0, 0.0) to Vector2f(0f, 0f),
+                Vector3d(1.0, -1.0, 0.0) to Vector2f(1f, 0f),
+                Vector3d(1.0, 1.0, 0.0) to Vector2f(1f, 1f),
+                Vector3d(-1.0, 1.0, 0.0) to Vector2f(0f, 1f),
+            )
+
+            val glStateBackup = GlStateBackup()
+            RenderSystem.backupGlState(glStateBackup)
+            RenderSystem.backupProjectionMatrix()
+
+            RenderSystem.setProjectionMatrix(
+                Matrix4f().setPerspective(
+                    Math.toRadians(70.0).toFloat(),
+                    (window.framebufferSize.x / window.framebufferSize.y).toFloat(),
+                    0.01f,
+                    1e3f,
+                ),
+                VertexSorting.DISTANCE_TO_ORIGIN
+            )
+            val stack = RenderSystem.getModelViewStack()
+            stack.pushMatrix()
+            stack.identity()
+            cameraTransform(stack)
+            RenderSystem.applyModelViewMatrix()
+
+            RenderSystem.enableBlend()
+            RenderSystem.enableCull()
+            RenderSystem.enableDepthTest()
+            RenderSystem.setShader(GameRenderer::getPositionTexColorShader)
+            screens.forEach { screen ->
+                RenderSystem.setShaderTexture(0, screen.framebuffer.colorTextureId)
+                val builder = RenderSystem.renderThreadTesselator()
+                    .begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX_COLOR)
+                val vertMul = Vector3d(screen.realSize.mul(0.5, Vector2d()), 1.0)
+                for ((vert, uv) in QUAD) {
+                    builder.addVertex(screen.realPose.global().transform(vert.mul(vertMul, Vector3d())).toVector3f())
+                        .setUv(uv.x, uv.y)
+                        .setColor(1f, 1f, 1f, 1f)
+                }
+                BufferUploader.drawWithShader(builder.buildOrThrow())
+            }
+
+            stack.popMatrix()
+            RenderSystem.restoreGlState(glStateBackup)
+            RenderSystem.restoreProjectionMatrix()
+        }
+
+        window.blitFramebuffer(framebuffer)
     }
 }
 
@@ -44,13 +116,27 @@ object CubeDemo1 {
     fun init() {
         initialized = true
 
-        Screen3D.Manager.afterRenderAll += { visualizer.draw() }
+        Screen3D.Manager.afterRenderAll += {
+            visualizer.draw(
+                cubeScreens,
+                { stack ->
+                    stack
+//                        .translate(realCameraPos.toVector3f())
+                        .lookAt(
+                            realCameraPos.toVector3f(),
+                            cubeRealPose.pos.toVector3f(),
+                            Vector3f(0f, 1f, 0f)
+                        )
+                }
+            )
+        }
 
         visualizer = Visualizer(ModWindow(Vector2i(800, 800), title = "Visualizer"))
 
         val RESOLUTION = 480
         val SIZE = 7.1
-        val FACE_OFFSET = 4.2
+//        val FACE_OFFSET = 4.285
+        val FACE_OFFSET = 7.1/2 + 0.2
         val cubeWindow = ModWindow(Vector2i(RESOLUTION * 5, RESOLUTION), title = "Cube Demo 1")
         fun makeCubeScreen(index: Int, orientation: Quaterniond): Screen3D {
             val realPose = Screen3D.Pose(
@@ -103,7 +189,7 @@ object CubeDemo1 {
             it.clipAtScreenPlane = false
             it.zNear = 0.05
         }
-        cubeVirtualPose.scale = 8.0
+        cubeVirtualPose.scale = 2.0
 
         realCameraPos.set(
             Vector3d(eyePos.get())
