@@ -43,7 +43,7 @@ class Screen3D(
     var zNear: Double = 0.05,
     var clipAtScreenPlane: Boolean = true,
 ) {
-    data class Pose(
+    class Pose(
         var pos: Vector3d = Vector3d(),
         var orientation: Quaterniond = Quaterniond(),
         var scale: Double = 1.0,
@@ -60,6 +60,13 @@ class Screen3D(
                 scale = gParent.scale * scale
             )
         }
+
+        fun copy() = Pose(
+            pos = Vector3d(pos),
+            orientation = Quaterniond(orientation),
+            scale = scale,
+            parent = parent
+        )
     }
 
     val framebuffer = MainTarget(viewport.width, viewport.height)
@@ -81,9 +88,9 @@ class Screen3D(
         val gRealSize = realSize.mul(gRealPose.scale, Vector2d())
         val gVirtualSize = virtualSize.mul(gVirtualPose.scale, Vector2d())
 
-        val localRealCameraPos = gRealPose.orientation.transformInverse(realCameraPos - gRealPose.pos)
         val scale = gVirtualSize.div(gRealSize, Vector2d())
         val scale3d = Vector3d(scale, (scale.x + scale.y) / 2.0)
+        val localRealCameraPos = gRealPose.orientation.transformInverse(realCameraPos - gRealPose.pos)
         val localVirtualCameraPos = localRealCameraPos.mul(scale3d, Vector3d())
         if (localVirtualCameraPos.z <= 0.0) return false // camera is behind screen
         virtualCameraPos = gVirtualPose.orientation.transform(localVirtualCameraPos, Vector3d()) + gVirtualPose.pos

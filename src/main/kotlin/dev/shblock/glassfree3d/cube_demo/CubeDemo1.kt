@@ -135,8 +135,8 @@ object CubeDemo1 {
 
         val RESOLUTION = 480
         val SIZE = 7.1
-//        val FACE_OFFSET = 4.285
-        val FACE_OFFSET = 7.1/2 + 0.2
+        val FACE_OFFSET = 4.285
+//        val FACE_OFFSET = 7.1/2 + 0.2
         val cubeWindow = ModWindow(Vector2i(RESOLUTION * 5, RESOLUTION), title = "Cube Demo 1")
         fun makeCubeScreen(index: Int, orientation: Quaterniond): Screen3D {
             val realPose = Screen3D.Pose(
@@ -144,11 +144,13 @@ object CubeDemo1 {
                 orientation,
                 parent = cubeRealPose
             )
+            val virtualPose = realPose.copy().apply { parent = cubeVirtualPose }
+            virtualPose.pos.mul(1.0 / SIZE)
             return Screen3D(
                 cubeWindow, Rect2i(RESOLUTION * index, 0, RESOLUTION, RESOLUTION),
                 realPose = realPose,
                 realSize = Vector2d(SIZE),
-                virtualPose = realPose.copy(parent = cubeVirtualPose),
+                virtualPose = virtualPose,
                 virtualSize = Vector2d(1.0),
                 realCameraPos = realCameraPos,
             )
@@ -189,7 +191,7 @@ object CubeDemo1 {
             it.clipAtScreenPlane = false
             it.zNear = 0.05
         }
-        cubeVirtualPose.scale = 2.0
+        cubeVirtualPose.scale = 8.0
 
         realCameraPos.set(
             Vector3d(eyePos.get())
