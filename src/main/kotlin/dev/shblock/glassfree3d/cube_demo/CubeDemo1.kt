@@ -128,7 +128,7 @@ object CubeDemo1 {
 
         val RESOLUTION = 480
         val SIZE = 7.1
-        val FACE_OFFSET = 4.285
+        val FACE_OFFSET = 7.7/2 + 0.23
 //        val FACE_OFFSET = 7.1/2 + 0.2
         val cubeWindow = ModWindow(Vector2i(RESOLUTION * 5, RESOLUTION), title = "Cube Demo 1")
         fun makeCubeScreen(index: Int, orientation: Quaterniond): Screen3D {
@@ -184,7 +184,7 @@ object CubeDemo1 {
             it.zNear = 0.05
             it.clipAtScreenPlane = true
         }
-        cubeVirtualPose.scale = 5.0
+        cubeVirtualPose.scale = 8.0
 
         realCameraPos.set(
             Vector3d(eyePos.get())
