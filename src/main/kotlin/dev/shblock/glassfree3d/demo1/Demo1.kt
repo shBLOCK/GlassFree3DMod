@@ -136,13 +136,13 @@ object Demo1 {
         ).add(DISPLAY_POS)
         screen.realSize = screenB.sub(screenA, Vector2d()).mul(DISPLAY_SIZE)
         screen.realCameraPos = Vector3d(eyePos.get())
-            .mul(Vector3d(1.0, 1.0, -2.0))
+            .mul(Vector3d(1.0, 1.0, -1.0))
             .rotate(CAMERA_ORIENTATION)
             .add(CAMERA_POS)
         println(screen.realCameraPos)
 
         screen.virtualPose.pos = MC.gameRenderer.mainCamera.position.toVector3d()
         screen.virtualPose.orientation = Quaterniond(MC.gameRenderer.mainCamera.rotation())
-        screen.virtualSize = screen.realSize.mul(50.0 / DISPLAY_SIZE.y, Vector2d())
+        screen.virtualSize = screen.realSize.mul(16.0 / DISPLAY_SIZE.y, Vector2d())
     }
 }
