@@ -17,7 +17,8 @@ import org.lwjgl.system.MemoryUtil.NULL
 class ModWindow(
     size: Vector2i,
     pos: Vector2i = Vector2i(GLFW_ANY_POSITION),
-    val title: String
+    val title: String,
+    fullScreenMonitor: Long? = null
 ) {
     private var _size = size
     var size
@@ -46,9 +47,15 @@ class ModWindow(
         glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, 1)
         glfwWindowHint(GLFW_POSITION_X, pos.x)
         glfwWindowHint(GLFW_POSITION_Y, pos.y)
+        glfwWindowHint(GLFW_AUTO_ICONIFY, GLFW_FALSE)
     }
 
-    private val window = glfwCreateWindow(size.x, size.y, title, NULL, MC.window.window)
+    private val window = glfwCreateWindow(
+        size.x, size.y,
+        title,
+        fullScreenMonitor ?: NULL,
+        MC.window.window
+    )
 
     init {
         glfwSetWindowPosCallback(window) { _, x, y ->
