@@ -8,6 +8,7 @@ import net.neoforged.bus.api.SubscribeEvent
 import net.neoforged.fml.common.EventBusSubscriber
 import net.neoforged.fml.common.Mod
 import net.neoforged.neoforge.client.event.ClientTickEvent
+import net.neoforged.neoforge.client.event.RenderFrameEvent
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
 
@@ -19,11 +20,11 @@ object GlassFree3DMod {
     val LOGGER: Logger = LogManager.getLogger(ID)
 
     @SubscribeEvent
-    fun onClientTick(event: ClientTickEvent.Pre) {
+    fun onPreRenderFrame(event: RenderFrameEvent.Pre) {
         if (MC.level != null) {
-//            Demo1.tick()
+            Demo1.tick()
 //            CubeDemo1.tick()
-            FlipGoDemo1.tick()
+//            FlipGoDemo1.tick()
         }
     }
 }

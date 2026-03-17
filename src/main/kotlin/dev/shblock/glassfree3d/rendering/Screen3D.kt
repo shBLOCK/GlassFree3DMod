@@ -18,6 +18,9 @@ import net.minecraft.resources.ResourceKey
 import net.minecraft.world.level.ChunkPos
 import net.minecraft.world.level.Level
 import net.minecraft.world.level.block.state.BlockState
+import net.neoforged.bus.api.SubscribeEvent
+import net.neoforged.fml.common.EventBusSubscriber
+import net.neoforged.neoforge.client.event.ClientTickEvent
 import org.joml.Matrix4d
 import org.joml.Matrix4f
 import org.joml.Quaterniond
@@ -133,6 +136,10 @@ class Screen3D(
 
             RenderSystem.setProjectionMatrix(projectionMatrixF, VertexSorting.DISTANCE_TO_ORIGIN)
 
+            if (!MC.isPaused) {
+                levelRenderer.tickRain(virtualCamera)
+            }
+            
             levelRenderer.prepareCullFrustum(
                 virtualCamera.position,
                 frustumMatrixF,
@@ -140,7 +147,7 @@ class Screen3D(
             )
             levelRenderer.renderLevel(
                 MC.timer,
-                false,
+                true,
                 virtualCamera,
                 MC.gameRenderer,
                 MC.gameRenderer.lightTexture(),
@@ -157,6 +164,7 @@ class Screen3D(
     }
 
     @Suppress("FunctionName")
+    @EventBusSubscriber
     object Manager {
         private val screens = mutableListOf<Screen3D>()
         private val windows = mutableSetOf<ModWindow>()
@@ -180,6 +188,13 @@ class Screen3D(
 
                     setLevel(MC.level) // TODO: actually handle non-current levels
                 }
+            }
+        }
+        
+        @SubscribeEvent
+        fun onPostClientTick(event: ClientTickEvent.Post) {
+            if (!MC.isPaused) {
+                levelRenderers.values.forEach { it.tick() }
             }
         }
 
