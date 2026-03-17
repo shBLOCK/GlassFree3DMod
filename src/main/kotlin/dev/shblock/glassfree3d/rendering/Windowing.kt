@@ -41,15 +41,18 @@ class ModWindow(
 
     init {
         glfwDefaultWindowHints()
-        glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API)
-        glfwWindowHint(GLFW_CONTEXT_CREATION_API, GLFW_NATIVE_CONTEXT_API)
+//        glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API)
+//        glfwWindowHint(GLFW_CONTEXT_CREATION_API, GLFW_NATIVE_CONTEXT_API)
         glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3)
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2)
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3)
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE)
-        glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, 1)
+//        glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, 1)
         glfwWindowHint(GLFW_POSITION_X, pos.x)
         glfwWindowHint(GLFW_POSITION_Y, pos.y)
         glfwWindowHint(GLFW_AUTO_ICONIFY, GLFW_FALSE)
+        
+        glfwWindowHint(GLFW_ALPHA_BITS, 8)
+        glfwWindowHint(GLFW_TRANSPARENT_FRAMEBUFFER, GLFW_TRUE)
     }
 
     private val window = glfwCreateWindow(
@@ -126,7 +129,7 @@ class ModWindow(
             vp.x, vp.y, vp.x1, vp.y1,
             GL_COLOR_BUFFER_BIT, GL_NEAREST
         )
-
+        
         if (flip) glfwSwapBuffers(window)
         if (ctx != window) glfwMakeContextCurrent(ctx)
     }

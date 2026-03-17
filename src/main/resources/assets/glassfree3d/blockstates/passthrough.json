@@ -1,0 +1,7 @@
+{
+    "variants": {
+        "": {
+            "model": "glassfree3d:block/passthrough"
+        }
+    }
+}

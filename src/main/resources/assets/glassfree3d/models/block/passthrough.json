@@ -1,0 +1,7 @@
+{
+    "parent": "minecraft:block/cube_all",
+    "textures": {
+        "all": "glassfree3d:block/passthrough"
+    },
+    "render_type": "minecraft:solid"
+}
