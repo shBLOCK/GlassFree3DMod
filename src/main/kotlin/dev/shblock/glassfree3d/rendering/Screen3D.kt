@@ -119,7 +119,15 @@ class Screen3D(
 
     private fun render() {
         RenderSystem.assertOnRenderThread()
-
+        
+        virtualCamera.setup(
+            MC.level!!,
+            MC.player!!,
+            true,
+            false,
+            MC.timer.getGameTimeDeltaPartialTick(true)
+        )
+        
         if (!updateProjectionAndCamera()) return
 
         MiscUtils.withMainRenderTarget(framebuffer) {
@@ -128,8 +136,6 @@ class Screen3D(
             framebuffer.bindWrite(true)
 
             val levelRenderer = Manager.getLevelRenderer(MC.level!!.dimension())
-            virtualCamera.level = levelRenderer.level!!
-            virtualCamera.entity = MC.player!!
 
             val frustumMatrixF = Matrix4f(frustumMatrix)
             val projectionMatrixF = Matrix4f(projectionMatrix)
