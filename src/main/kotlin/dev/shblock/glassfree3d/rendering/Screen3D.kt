@@ -52,8 +52,9 @@ class Screen3D(
         var scale: Double = 1.0,
         var parent: Pose? = null
     ) {
-        fun transform(vec: Vector3d): Vector3d =
-            orientation.transform(vec, Vector3d()).mul(scale).add(pos)
+        fun transform(vec: Vector3d): Vector3d = transformAffine(vec).add(pos)
+
+        fun transformAffine(vec: Vector3d): Vector3d = orientation.transform(vec, Vector3d()).mul(scale)
 
         fun global(): Pose {
             val gParent = parent?.global() ?: return this.copy()
@@ -76,6 +77,7 @@ class Screen3D(
 
     var virtualCameraPos = Vector3d(0.0, 0.0, 1.0)
         private set
+    private var localVirtualCameraPos = Vector3d(0.0, 0.0, 1.0)
 
     private val virtualCamera = Camera()
     private var frustumMatrix = Matrix4d()
@@ -94,13 +96,14 @@ class Screen3D(
         val scale = gVirtualSize.div(gRealSize, Vector2d())
         val scale3d = Vector3d(scale, (scale.x + scale.y) / 2.0)
         val localRealCameraPos = gRealPose.orientation.transformInverse(realCameraPos - gRealPose.pos)
-        val localVirtualCameraPos = localRealCameraPos.mul(scale3d, Vector3d())
+        localVirtualCameraPos = localRealCameraPos.mul(scale3d, Vector3d())
         if (localVirtualCameraPos.z <= 0.0) return false // camera is behind screen
         virtualCameraPos = gVirtualPose.orientation.transform(localVirtualCameraPos, Vector3d()) + gVirtualPose.pos
 
         if (clipAtScreenPlane) {
             zNear = localVirtualCameraPos.z
         }
+        val zNear = zNear * gVirtualPose.scale
         virtualCamera.initialized = true
         virtualCamera.position = virtualCameraPos.toVec3()
         virtualCamera.rotation.set(gVirtualPose.orientation)
@@ -117,9 +120,20 @@ class Screen3D(
         return true
     }
 
+    /**
+     * @return ray direction vector, normalized so that its projection length on the camera's actual imaginary center axis (not the off-center axis) is one (scaled by [virtualPose]).
+     */
+    fun unprojectVirtualScreen(ndc: Vector2d): Vector3d {
+        val ray = Vector3d(localVirtualCameraPos).mul(-1.0).add(
+            Vector3d(Vector2d(ndc).mul(virtualSize).mul(0.5), 0.0)
+        )
+        ray.div(-ray.z) // "normalize"
+        return virtualPose.global().transformAffine(ray)
+    }
+
     private fun render() {
         RenderSystem.assertOnRenderThread()
-        
+
         virtualCamera.setup(
             MC.level!!,
             MC.player!!,
@@ -127,9 +141,11 @@ class Screen3D(
             false,
             MC.timer.getGameTimeDeltaPartialTick(true)
         )
-        
+
         if (!updateProjectionAndCamera()) return
 
+        if (viewport.width == 0 || viewport.height == 0) return
+        
         MiscUtils.withMainRenderTarget(framebuffer) {
             framebuffer.resizeLazy(viewport.width, viewport.height)
 
@@ -145,7 +161,7 @@ class Screen3D(
             if (!MC.isPaused) {
                 levelRenderer.tickRain(virtualCamera)
             }
-            
+
             levelRenderer.prepareCullFrustum(
                 virtualCamera.position,
                 frustumMatrixF,
@@ -196,7 +212,7 @@ class Screen3D(
                 }
             }
         }
-        
+
         @SubscribeEvent
         fun onPostClientTick(event: ClientTickEvent.Post) {
             if (!MC.isPaused) {

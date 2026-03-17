@@ -8,7 +8,9 @@ import dev.shblock.glassfree3d.utils.MiscUtils
 import dev.shblock.glassfree3d.utils.x1
 import dev.shblock.glassfree3d.utils.y1
 import net.minecraft.client.renderer.Rect2i
+import org.joml.Vector2d
 import org.joml.Vector2i
+import org.joml.Vector3d
 import org.lwjgl.glfw.GLFW.*
 import org.lwjgl.opengl.GL
 import org.lwjgl.opengl.GL30.*
@@ -57,6 +59,14 @@ class ModWindow(
         MC.window.window
     )
 
+    var focused = false
+        private set
+    var cursorPos = Vector2d()
+        private set
+    var cursorPosCallback: ((window: ModWindow, pos: Vector2d) -> Unit)? = null
+    var mouseButtonCallback: ((window: ModWindow, button: Int, action: Int, modifiers: Int) -> Unit)? = null
+    var scrollCallback: ((window: ModWindow, offset: Vector2d) -> Unit)? = null
+
     init {
         glfwSetWindowPosCallback(window) { _, x, y ->
             _pos = Vector2i(x, y)
@@ -67,6 +77,17 @@ class ModWindow(
         glfwSetFramebufferSizeCallback(window) { _, width, height ->
             framebufferSize = Vector2i(width, height)
         }
+
+        glfwSetCursorPosCallback(window) { _, x, y ->
+            cursorPos = Vector2d(x, y)
+            cursorPosCallback?.invoke(this, cursorPos)
+        }
+        glfwSetMouseButtonCallback(window) { _, button, action, modifiers ->
+            mouseButtonCallback?.invoke(this, button, action, modifiers)
+        }
+        glfwSetScrollCallback(window) { _, x, y -> scrollCallback?.invoke(this, Vector2d(x, y)) }
+
+        glfwSetWindowFocusCallback(window) { _, focused -> this.focused = focused }
 
         val oldCtx = glfwGetCurrentContext()
 
@@ -115,4 +136,10 @@ class ModWindow(
         Tesselator.getInstance().clear()
         glfwSwapBuffers(window)
     }
+
+    fun toNDC(pos: Vector2d) =
+        Vector2d(pos)
+            .div(Vector2d(size))
+            .sub(0.5, 0.5)
+            .mul(2.0, -2.0)
 }
