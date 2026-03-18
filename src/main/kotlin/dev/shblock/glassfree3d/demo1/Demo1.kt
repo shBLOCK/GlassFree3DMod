@@ -1,22 +1,27 @@
 package dev.shblock.glassfree3d.demo1
 
+import com.mojang.blaze3d.platform.GlConst
 import com.mojang.blaze3d.platform.InputConstants
+import com.mojang.blaze3d.systems.RenderSystem
+import com.mojang.blaze3d.vertex.PoseStack
+import com.mojang.blaze3d.vertex.VertexSorting
 import dev.shblock.glassfree3d.ducks.GameRendererAccessor
 import dev.shblock.glassfree3d.rendering.ModWindow
 import dev.shblock.glassfree3d.rendering.Screen3D
 import dev.shblock.glassfree3d.utils.MC
-import dev.shblock.glassfree3d.utils.MCA
 import dev.shblock.glassfree3d.utils.asVector3d
 import dev.shblock.glassfree3d.utils.plus
 import dev.shblock.glassfree3d.utils.toVec3
 import dev.shblock.glassfree3d.utils.toVector3d
 import net.minecraft.client.KeyMapping
+import net.minecraft.client.Minecraft
 import net.minecraft.client.renderer.Rect2i
 import net.minecraft.util.GsonHelper
 import net.minecraft.world.entity.projectile.ProjectileUtil
 import net.minecraft.world.level.ClipContext
 import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.HitResult
+import org.joml.Matrix4f
 import org.joml.Quaterniond
 import org.joml.Vector2d
 import org.joml.Vector2i
@@ -66,7 +71,7 @@ object Demo1 {
             if (!window.focused) return@gf_addPicker null
 
             val origin = screen.virtualCameraPos
-            val direction = screen.unprojectVirtualScreen(window.toNDC(window.cursorPos))
+            val direction = screen.unprojectVirtualScreenGlobal(window.toNDC(window.cursorPos))
             var maxDistance = 1e3
             val localFrom = Vector3d(direction).mul(screen.zNear)
             var localTo = Vector3d(direction).mul(maxDistance).add(localFrom)
@@ -102,6 +107,28 @@ object Demo1 {
         }
 
         screen = Screen3D(window, Rect2i(0, 0, 2560, 1600))
+        screen.afterRender += { screen ->
+            RenderSystem.clear(GlConst.GL_DEPTH_BUFFER_BIT, Minecraft.ON_OSX)
+
+            RenderSystem.setProjectionMatrix(Matrix4f(screen.projectionMatrix), VertexSorting.DISTANCE_TO_ORIGIN)
+            val modelViewStack = RenderSystem.getModelViewStack()
+            modelViewStack.pushMatrix().identity()
+            RenderSystem.applyModelViewMatrix()
+
+            val pos = screen.unprojectVirtualScreenLocal(window.toNDC(window.cursorPos)).mul(screen.zScreen)
+
+            val partialTick = MC.timer.getGameTimeDeltaPartialTick(true)
+            MC.gameRenderer.itemInHandRenderer.renderHandsWithItems(
+                partialTick,
+                PoseStack().apply {
+                    translate(pos.x, pos.y, pos.z)
+                },
+                MC.renderBuffers().bufferSource(),
+                MC.player!!,
+                MC.entityRenderDispatcher.getPackedLightCoords(MC.player!!, partialTick)
+            )
+            modelViewStack.popMatrix()
+        }
 
         thread(name = "Demo1SocketClient", isDaemon = true) {
             while (true) {

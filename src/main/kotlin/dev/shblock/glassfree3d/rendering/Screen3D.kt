@@ -1,18 +1,15 @@
 package dev.shblock.glassfree3d.rendering
 
 import com.mojang.blaze3d.pipeline.MainTarget
-import com.mojang.blaze3d.platform.GlStateManager
 import com.mojang.blaze3d.systems.RenderSystem
 import com.mojang.blaze3d.vertex.*
 import dev.shblock.glassfree3d.ducks.LevelRendererAccessor
 import dev.shblock.glassfree3d.utils.*
 import net.minecraft.client.Camera
-import net.minecraft.client.Minecraft
 import net.minecraft.client.multiplayer.ClientLevel
 import net.minecraft.client.renderer.LevelRenderer
 import net.minecraft.client.renderer.Rect2i
 import net.minecraft.client.renderer.RenderBuffers
-import net.minecraft.client.renderer.ShaderInstance
 import net.minecraft.core.BlockPos
 import net.minecraft.resources.ResourceKey
 import net.minecraft.world.level.ChunkPos
@@ -28,9 +25,7 @@ import org.joml.Quaternionf
 import org.joml.Vector2d
 import org.joml.Vector3d
 import org.lwjgl.glfw.GLFW.glfwMakeContextCurrent
-import org.lwjgl.opengl.GL33.*
 import java.lang.Runtime
-import java.util.*
 
 class Screen3D(
     val window: ModWindow,
@@ -78,10 +73,14 @@ class Screen3D(
     var virtualCameraPos = Vector3d(0.0, 0.0, 1.0)
         private set
     private var localVirtualCameraPos = Vector3d(0.0, 0.0, 1.0)
+    var zScreen = 0.0
+        private set
 
     private val virtualCamera = Camera()
-    private var frustumMatrix = Matrix4d()
-    private var projectionMatrix = Matrix4d()
+    var frustumMatrix = Matrix4d()
+        private set
+    var projectionMatrix = Matrix4d()
+        private set
 
     init {
         Manager.newScreen(this)
@@ -100,8 +99,9 @@ class Screen3D(
         if (localVirtualCameraPos.z <= 0.0) return false // camera is behind screen
         virtualCameraPos = gVirtualPose.orientation.transform(localVirtualCameraPos, Vector3d()) + gVirtualPose.pos
 
+        zScreen = localVirtualCameraPos.z
         if (clipAtScreenPlane) {
-            zNear = localVirtualCameraPos.z
+            zNear = zScreen
         }
         val zNear = zNear * gVirtualPose.scale
         virtualCamera.initialized = true
@@ -123,23 +123,31 @@ class Screen3D(
     /**
      * @return ray direction vector, normalized so that its projection length on the camera's actual imaginary center axis (not the off-center axis) is one (scaled by [virtualPose]).
      */
-    fun unprojectVirtualScreen(ndc: Vector2d): Vector3d {
+    fun unprojectVirtualScreenLocal(ndc: Vector2d): Vector3d {
         val ray = Vector3d(localVirtualCameraPos).mul(-1.0).add(
             Vector3d(Vector2d(ndc).mul(virtualSize).mul(0.5), 0.0)
         )
         ray.div(-ray.z) // "normalize"
-        return virtualPose.global().transformAffine(ray)
+        return ray
     }
+
+    fun unprojectVirtualScreenGlobal(ndc: Vector2d) =
+        virtualPose.global().transformAffine(unprojectVirtualScreenLocal(ndc))
+    
+    val afterRender = arrayListOf<(Screen3D) -> Unit>()
 
     private fun render() {
         RenderSystem.assertOnRenderThread()
 
+        val partialTick = MC.timer.getGameTimeDeltaPartialTick(true)
+        
         virtualCamera.setup(
             MC.level!!,
             MC.player!!,
-            true,
+//            true,
+            false, // don't render player
             false,
-            MC.timer.getGameTimeDeltaPartialTick(true)
+            partialTick
         )
 
         if (!updateProjectionAndCamera()) return
@@ -176,6 +184,8 @@ class Screen3D(
                 frustumMatrixF,
                 projectionMatrixF
             )
+            
+            afterRender.forEach { it(this) }
 
             framebuffer.unbindWrite()
         }
