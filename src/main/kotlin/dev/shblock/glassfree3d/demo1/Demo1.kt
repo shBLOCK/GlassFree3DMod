@@ -68,7 +68,7 @@ object Demo1 {
         }
 
         (MC.gameRenderer as GameRendererAccessor).gf_addPicker {
-            if (!window.focused) return@gf_addPicker null
+            if (!window.cursorEntered) return@gf_addPicker null
 
             val origin = screen.virtualCameraPos
             val direction = screen.unprojectVirtualScreenGlobal(window.toNDC(window.cursorPos))
@@ -107,9 +107,11 @@ object Demo1 {
         }
 
         screen = Screen3D(window, Rect2i(0, 0, 2560, 1600))
-        screen.afterRender += { screen ->
+        screen.afterRender += afterRender@ { screen ->
+            if (!window.cursorEntered) return@afterRender
+            
             RenderSystem.clear(GlConst.GL_DEPTH_BUFFER_BIT, Minecraft.ON_OSX)
-
+            
             RenderSystem.setProjectionMatrix(Matrix4f(screen.projectionMatrix), VertexSorting.DISTANCE_TO_ORIGIN)
             val modelViewStack = RenderSystem.getModelViewStack()
             modelViewStack.pushMatrix().identity()
@@ -235,6 +237,6 @@ object Demo1 {
 
         screen.virtualPose.pos = MC.gameRenderer.mainCamera.position.toVector3d()
         screen.virtualPose.orientation = Quaterniond(MC.gameRenderer.mainCamera.rotation())
-        screen.virtualSize = screen.realSize.mul(16.0 / DISPLAY_SIZE.y, Vector2d())
+        screen.virtualSize = screen.realSize.mul(24.0 / DISPLAY_SIZE.y, Vector2d())
     }
 }

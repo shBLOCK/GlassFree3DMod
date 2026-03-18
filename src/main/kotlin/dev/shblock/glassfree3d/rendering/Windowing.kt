@@ -62,6 +62,8 @@ class ModWindow(
         MC.window.window
     )
 
+    var cursorEntered = false
+        private set
     var focused = false
         private set
     var cursorPos = Vector2d()
@@ -89,7 +91,8 @@ class ModWindow(
             mouseButtonCallback?.invoke(this, button, action, modifiers)
         }
         glfwSetScrollCallback(window) { _, x, y -> scrollCallback?.invoke(this, Vector2d(x, y)) }
-
+        glfwSetCursorEnterCallback(window) { _, entered -> cursorEntered = entered }
+        
         glfwSetWindowFocusCallback(window) { _, focused -> this.focused = focused }
 
         val oldCtx = glfwGetCurrentContext()
