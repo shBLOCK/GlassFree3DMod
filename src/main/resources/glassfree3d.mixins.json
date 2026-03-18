@@ -4,6 +4,7 @@
     "package": "dev.shblock.glassfree3d.mixin",
     "compatibilityLevel": "JAVA_21",
     "mixins": [
+        "KeyConflictContextMixin"
     ],
     "client": [
         "ClientLevelMixin",
